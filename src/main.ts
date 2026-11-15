@@ -548,22 +548,53 @@ class SwordsManExplorer {
       e.preventDefault();
       deferredPrompt = e as unknown as { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
       if (installBtn) {
-        installBtn.classList.remove('hidden');
+        installBtn.classList.add('primary');
+        installBtn.textContent = '📲 앱 설치 가능';
       }
     });
     if (installBtn) {
       installBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        await deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-        installBtn.classList.add('hidden');
+        if (deferredPrompt) {
+          await deferredPrompt.prompt();
+          const choice = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          if (choice.outcome === 'accepted') {
+            installBtn.textContent = '✅ 설치 완료';
+            installBtn.classList.remove('primary');
+          }
+          return;
+        }
+        const isStandalone =
+          window.matchMedia('(display-mode: standalone)').matches ||
+          Boolean((navigator as unknown as { standalone?: boolean }).standalone);
+        if (isStandalone) {
+          window.alert('이미 설치된 앱(Standalone) 모드로 실행 중입니다.');
+        } else if (!window.isSecureContext) {
+          window.alert(
+            '현재 HTTP LAN 주소(비보안 연결)로 접속하여 브라우저가 PWA 자동 설치를 차단했습니다.\n\n' +
+            '설치 방법:\n' +
+            '1) Android USB 연결: adb reverse tcp:5188 tcp:5188 실행 후 http://localhost:5188/mobile.html 접속\n' +
+            '2) Android Chrome: 주소창 chrome://flags/#unsafely-treat-insecure-origin-as-secure 에 현재 주소 등록\n' +
+            '3) iOS Safari: 하단 공유(□↑) → "홈 화면에 추가"'
+          );
+        } else {
+          window.alert(
+            '브라우저 주소창 우측의 설치 아이콘(⊕) 또는 브라우저 메뉴(⋮ / 공유) → "앱 설치" 또는 "홈 화면에 추가"를 눌러 주세요.'
+          );
+        }
       });
     }
 
     const offlineBtn = document.getElementById('pwaOfflineBtn') as HTMLButtonElement | null;
-    if (offlineBtn && 'caches' in window) {
+    if (offlineBtn) {
       offlineBtn.addEventListener('click', async () => {
+        if (!('caches' in window)) {
+          alert(
+            '현재 HTTP 비보안 연결에서는 브라우저 보안 정책상 오프라인 저장소(Cache API)를 사용할 수 없습니다.\n\n' +
+            'http://localhost:5188/mobile.html (또는 HTTPS / Chrome insecure-origin 허용)로 접속한 뒤 다시 눌러 주세요.'
+          );
+          return;
+        }
         if (offlineBtn.disabled) return;
         offlineBtn.disabled = true;
         const urls = new Set<string>();
