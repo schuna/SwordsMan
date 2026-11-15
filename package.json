@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "extract": "python tools/extract_assets.py",
+    "remaster": "python tools/remaster_assets.py",
     "build": "tsc",
     "start": "node server.js",
     "dev": "tsc && node server.js"

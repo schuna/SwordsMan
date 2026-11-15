@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>소오강호 (SwordsMan 1993) — 리마스터 에셋 익스플로러 &amp; 테스트베드</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
 </head>
 <body>
   <header class="topbar">
@@ -12,10 +12,13 @@
       <div class="seal">笑傲</div>
       <div>
         <h1>소오강호 (동방불패 · SwordsMan 1993) Remaster Studio</h1>
-        <p class="subtitle">Phase 1 · Soft-World v0.68 100% 추출 에셋 뷰어 &amp; Web Canvas/OPL2/KFONT 테스트베드 (Port 5188)</p>
+        <p class="subtitle">Phase 2 · HD 그래픽(EPX/디더링제거) &amp; 오디오(Chorus/Hall Reverb/22kHz PCM) A/B 비교 스튜디오 (Port 5188)</p>
       </div>
     </div>
-    <div class="status-pill" id="statusPill">로딩 중...</div>
+    <div class="controls-inline">
+      <button id="globalModeToggle" class="btn primary" data-mode="remastered">✨ 리마스터 HD (Phase 2)</button>
+      <div class="status-pill" id="statusPill">로딩 중...</div>
+    </div>
   </header>
 
   <nav class="tabs" id="tabNav">
@@ -45,6 +48,7 @@
                 <option value="ui/pass_ref.png">pass.PNG (참조표)</option>
               </select>
               <select id="uiFilterSelect">
+                <option value="remastered" selected>Phase 2 리마스터 HD (A/B 분할 비교)</option>
                 <option value="nearest">Nearest (도스 원본 픽셀)</option>
                 <option value="smooth">Bilinear Smooth</option>
                 <option value="crt">CRT 스캔라인 + 글로우</option>
@@ -56,10 +60,16 @@
               </select>
             </div>
           </div>
+          <div class="player-bar" id="uiSplitBar" style="margin-top:0;margin-bottom:10px">
+            <span class="badge">◀ 1993 도스 원본</span>
+            <input type="range" id="uiSplitRange" min="0" max="100" value="50" />
+            <span class="badge gold">Phase 2 리마스터 HD ▶</span>
+            <span id="uiSplitPct" class="mono">50%</span>
+          </div>
           <div class="canvas-stage" id="uiStage">
             <canvas id="uiCanvas" width="640" height="400"></canvas>
           </div>
-          <p class="hint" id="uiInfo">320×200 VGA 원본 해상도를 Web Canvas에서 실시간 필터링합니다.</p>
+          <p class="hint" id="uiInfo">슬라이더를 움직여 도스 원본(좌)과 EPX/디더링 제거 리마스터(우)를 실시간으로 비교합니다.</p>
         </div>
 
         <div class="card">
@@ -87,17 +97,21 @@
           <div class="card-head">
             <h2>오프닝 &amp; 엔딩 시어터</h2>
             <div class="controls-inline">
+              <select id="sceneSourceSelect">
+                <option value="remastered" selected>Phase 2 리마스터 HD (2x EPX + 음원 리마스터)</option>
+                <option value="extracted">1993 도스 원본 (320×200 / OPL2 원본)</option>
+              </select>
               <select id="sceneSelect">
                 <option value="tit">TIT.GRP (오프닝 서화 타이틀 · 640×300)</option>
-                <option value="em1">EM1.GRP (프롤로그 1 · 320×200)</option>
-                <option value="em2">EM2.GRP (프롤로그 2 · 320×200)</option>
-                <option value="em3">EM3.GRP (프롤로그 3 · 320×200)</option>
-                <option value="d9">D9.GRP (엔딩/메인이벤트 · 320×200)</option>
+                <option value="em1">EM1.GRP (프롤로그 1 · 320→640px)</option>
+                <option value="em2">EM2.GRP (프롤로그 2 · 320→640px)</option>
+                <option value="em3">EM3.GRP (프롤로그 3 · 320→640px)</option>
+                <option value="d9">D9.GRP (엔딩/메인이벤트 · 320→640px)</option>
                 <option value="gt">GT.GRP (타이틀/크레딧 · 640×480)</option>
               </select>
               <select id="sceneFilter">
-                <option value="nearest">Nearest</option>
-                <option value="crt" selected>CRT Scanline</option>
+                <option value="nearest" selected>Sharp (Native/EPX)</option>
+                <option value="crt">CRT Scanline</option>
                 <option value="smooth">Smooth Upscale</option>
               </select>
             </div>
@@ -134,8 +148,14 @@
       <div class="two-col wide-left">
         <div class="card">
           <div class="card-head">
-            <h2>FACE.GRP 인물 초상화 150종 (50×50 RGBA)</h2>
-            <input type="search" id="faceSearch" placeholder="번호 필터 (예: 0, 12, 149)" />
+            <h2>FACE.GRP 인물 초상화 150종</h2>
+            <div class="controls-inline">
+              <select id="facesGridToggle">
+                <option value="remastered" selected>Phase 2 리마스터 HD 썸네일</option>
+                <option value="extracted">1993 도스 원본 (50×50)</option>
+              </select>
+              <input type="search" id="faceSearch" placeholder="번호 필터 (예: 0, 12, 149)" />
+            </div>
           </div>
           <div class="faces-grid" id="facesGrid"></div>
         </div>
@@ -152,7 +172,7 @@
               <canvas id="faceNearCanvas" width="200" height="200" class="checker"></canvas>
             </div>
             <div>
-              <p class="hint">4x 소프트 + 윤곽 보정</p>
+              <p class="hint" id="faceRemasterLabel">Phase 2 리마스터 HD (200×200 EPX)</p>
               <canvas id="faceSmoothCanvas" width="200" height="200" class="checker"></canvas>
             </div>
           </div>
@@ -174,6 +194,10 @@
         <div class="card-head">
           <h2>챕터별 월드맵 &amp; 스프라이트 (EVENT.0 ~ EVENT.14)</h2>
           <div class="controls-inline">
+            <select id="worldRemasterToggle">
+              <option value="remastered" selected>Phase 2 리마스터 (512px 맵 / 2x EPX 시트)</option>
+              <option value="extracted">1993 도스 원본 (128px 맵 / 1x 시트)</option>
+            </select>
             <label>챕터 선택:
               <select id="chapterSelect"></select>
             </label>
@@ -184,7 +208,7 @@
 
       <div class="two-col">
         <div class="card">
-          <div class="card-head"><h2>MAP.<span id="mapChLabel">0</span> (128×128 그리드)</h2></div>
+          <div class="card-head"><h2>MAP.<span id="mapChLabel">0</span> (<span id="mapResLabel">512×512 리마스터</span>)</h2></div>
           <div class="canvas-stage">
             <canvas id="mapCanvas" width="384" height="384"></canvas>
           </div>
@@ -193,7 +217,7 @@
 
         <div class="card">
           <div class="card-head">
-            <h2>스프라이트 애니메이터 &amp; 시트</h2>
+            <h2>스프라이트 애니메이터 &amp; A/B 비교</h2>
             <div class="controls-inline">
               <button id="sprPlayBtn" class="btn primary">▶ 애니 재생</button>
               <button id="sprPrevBtn" class="btn">◀</button>
@@ -202,7 +226,14 @@
             </div>
           </div>
           <div class="sprite-inspector">
-            <canvas id="spriteZoomCanvas" width="192" height="192" class="checker"></canvas>
+            <div>
+              <p class="hint" style="margin:0 0 4px">도스 원본 (1x 확대)</p>
+              <canvas id="spriteOrigCanvas" width="128" height="160" class="checker"></canvas>
+            </div>
+            <div>
+              <p class="hint" style="margin:0 0 4px">Phase 2 리마스터 (2x EPX)</p>
+              <canvas id="spriteZoomCanvas" width="160" height="160" class="checker"></canvas>
+            </div>
             <div id="spriteDetailMeta" class="meta-box" style="flex:1"></div>
           </div>
           <p class="hint" style="margin:10px 0 6px">시트의 스프라이트를 클릭해 프레임 선택:</p>
@@ -241,15 +272,21 @@
 
         <div class="card">
           <div class="card-head">
-            <h2>PCM 음성/효과음 (103클립 · WAV)</h2>
-            <select id="vocBankFilter">
-              <option value="ALL">전체 뱅크 (103)</option>
-              <option value="VOC0">VOC0 (인게임 · 14)</option>
-              <option value="E1V">E1V (오프닝 1 · 12)</option>
-              <option value="E2V">E2V (오프닝 2 · 25)</option>
-              <option value="E3V">E3V (오프닝 3 · 30)</option>
-              <option value="D9V">D9V (D9 이벤트 · 22)</option>
-            </select>
+            <h2>PCM 음성/효과음 (103클립 · 원본 vs 22kHz 리마스터)</h2>
+            <div class="controls-inline">
+              <select id="vocRemasterToggle">
+                <option value="remastered" selected>기본: Phase 2 리마스터 (22kHz 16-bit)</option>
+                <option value="extracted">기본: 1993 원본 (8kHz 8-bit)</option>
+              </select>
+              <select id="vocBankFilter">
+                <option value="ALL">전체 뱅크 (103)</option>
+                <option value="VOC0">VOC0 (인게임 · 14)</option>
+                <option value="E1V">E1V (오프닝 1 · 12)</option>
+                <option value="E2V">E2V (오프닝 2 · 25)</option>
+                <option value="E3V">E3V (오프닝 3 · 30)</option>
+                <option value="D9V">D9V (D9 이벤트 · 22)</option>
+              </select>
+            </div>
           </div>
           <div class="list-scroll" id="vocList"></div>
         </div>
@@ -274,19 +311,20 @@
           <div class="card-head">
             <h2>1993 KFONT.15 한글 16×16 비트맵 렌더러</h2>
             <select id="fontRenderMode">
+              <option value="phase2" selected>Phase 2 Scale2x 곡선 보간 + 금빛 그라데이션</option>
+              <option value="remaster">그림자 + 고대비 (2x)</option>
               <option value="dos">도스 16×16 도트 원본 (2x)</option>
-              <option value="remaster">리마스터 그림자 + 고대비 (2x)</option>
             </select>
           </div>
           <textarea id="kfontInput" rows="3" placeholder="여기에 한글/영문 문장을 입력하거나 왼쪽 대사를 클릭하세요...">소오강호 리마스터 테스트: 영호충과 동방불패!</textarea>
           <div class="canvas-stage dark-stage" style="margin-top:10px">
             <canvas id="kfontCanvas" width="600" height="200"></canvas>
           </div>
-          <p class="hint" style="margin-top:10px">원본 `KFONT.15` 2,350자 완성형 한글 + `FONT.E16` 8×16 영문 폰트 글리프맵에서 직접 픽셀을 합성합니다.</p>
+          <p class="hint" style="margin-top:10px">원본 `KFONT.15` 2,350자 완성형 한글 + `FONT.E16` 8×16 영문 폰트 글리프맵에 실시간 Scale2x 곡선 보간 및 그라데이션을 합성합니다.</p>
           <div style="margin-top:12px">
-            <p class="hint">KFONT.15 추출 시트 전체 미리보기:</p>
+            <p class="hint" id="kfontSheetLabel">Phase 2 KFONT.15 EPX 2x 리마스터 시트 미리보기:</p>
             <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:4px;background:#07090e">
-              <img src="/assets/extracted/fonts/kfont_15_hangul.png" alt="KFONT.15 Hangul sheet" style="max-width:100%" />
+              <img id="kfontSheetImg" src="/assets/remastered/fonts/kfont_15_hangul_hd.png" alt="KFONT.15 Hangul sheet" style="max-width:100%" />
             </div>
           </div>
         </div>
@@ -294,6 +332,6 @@
     </section>
   </main>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=2"></script>
 </body>
 </html>

@@ -69,11 +69,12 @@ function serveFile(req, res, filePath) {
       return;
     }
 
+    const isMutableAsset = ext === '.json' || ext === '.js' || ext === '.css' || ext === '.html';
     res.writeHead(200, {
       'Content-Type': mime,
       'Content-Length': total,
       'Accept-Ranges': 'bytes',
-      'Cache-Control': ext === '.json' ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': isMutableAsset ? 'no-cache, must-revalidate' : 'public, max-age=3600',
     });
     fs.createReadStream(filePath).pipe(res);
   });
@@ -93,7 +94,8 @@ const server = http.createServer(function (req, res) {
 
   if (urlPath === '/api/health') {
     const catalogExists = fs.existsSync(path.join(ASSETS_DIR, 'extracted', 'catalog.json'));
-    sendJson(res, 200, { ok: true, port: PORT, extracted: catalogExists });
+    const remasteredExists = fs.existsSync(path.join(ASSETS_DIR, 'remastered', 'remaster_catalog.json'));
+    sendJson(res, 200, { ok: true, port: PORT, extracted: catalogExists, remastered: remasteredExists });
     return;
   }
 

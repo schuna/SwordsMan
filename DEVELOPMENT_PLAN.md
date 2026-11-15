@@ -64,11 +64,10 @@
   * [x] `tools/extract_assets.py` 작성 및 전체 에셋 무손실 추출 완료 (`assets/extracted/`, **1,189파일 / 77.76MB**: 인물 150, 컷신 6편/842프레임+GIF, 월드맵 15, 챕터 스프라이트 7,604개, 한글 대사 652줄, PCM WAV 103개, AdLib OPL2 WAV+MIDI 19트랙, KFONT.15 완성형 한글 2,350자)
   * [x] 포트 `5188` 웹 에셋 브라우저(`server.js`, `src/main.ts`, `public/`) 구축 및 6개 탭·콘솔/네트워크 무오류 검증 완료
   * [x] Phase 1 완료 GitHub 동기화 (`schuna/SwordsMan`)
-* **Phase 2: 화질·음질 개선 파이프라인 적용**
-  * 타일/스프라이트 투명 RGBA 분리 및 픽셀아트 특화 xBRZ/AI 업스케일링 (4× 고해상도 팩 생성)
-  * 초상화(`FACE.GRP`) 150종 및 컷신(`TIT`, `GT`, `EM1~3`, `D9`) 디더링 제거 및 일러스트 고화질화
-  * OPL2 BGM 고음질 가상악기(국악/오케스트라 SoundFont) 리마스터링 및 8-bit PCM 음성 노이즈 제거·업샘플링
-  * Phase 2 완료 GitHub 동기화
+* **Phase 2: 화질·음질 개선 파이프라인 및 A/B 비교 스튜디오 구축** *(완료)*
+  * [x] `tools/remaster_assets.py` 작성 및 전수 리마스터링 완료 (`assets/remastered/`, **1,159파일 / 118.96MB**: 인물 150종 `200×200` 4x EPX + 디더링 제거 및 `faces_sheet_hd.png`, UI 화면 5종, 컷신 6편/842프레임 `640×400`/`640×480`/`640×300` EPX·디더링 제거 + GIF 5종, 월드맵 15종 `512×512` 4x EPX, 챕터 스프라이트 시트 15종 7,604개 2x EPX + `sprites_index_hd.json`, PCM 음성 103개 `22,050Hz` 16-bit Cubic Hermite 업샘플링·노이즈 게이트, AdLib OPL2 19트랙 `22,050Hz` 16-bit Exciter + LFO Chorus + Schroeder Hall Reverb 마스터링, `KFONT.15`/`FONT.E16` 2x EPX 시트)
+  * [x] 포트 `5188` 웹 리마스터 스튜디오(`src/main.ts` → `public/app.js`, `public/index.html`, `public/styles.css`, `server.js`) 업그레이드 및 6개 탭 A/B 실시간 비교·글로벌 모드 토글·무오류 검증 완료
+  * [x] Phase 2 완료 GitHub 동기화 (`schuna/SwordsMan`)
 * **Phase 3: 코어 엔진 이식 및 오프닝·월드 구동**
   * TypeScript 기반 오프닝(`TIT`) 시퀀서 및 `SM.EXE` 1:1 데이터/바이트코드 구동 코어 구현
   * 45도 쿼터뷰 렌더러, 충돌 판정, 200개 지역 전환, NPC 대화 및 이벤트 스크립트 인터프리터, 고해상도 한글 폰트 UI 통합

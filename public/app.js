@@ -1,17 +1,18 @@
 "use strict";
 const ASSET_BASE = '/assets/extracted/';
-async function fetchJson(relPath) {
-    const res = await fetch(ASSET_BASE + relPath);
+const REMASTER_BASE = '/assets/remastered/';
+async function fetchJson(relPath, base = ASSET_BASE) {
+    const res = await fetch(base + relPath);
     if (!res.ok)
-        throw new Error('Failed to load ' + relPath);
+        throw new Error('Failed to load ' + base + relPath);
     return (await res.json());
 }
-function loadImage(relOrUrl) {
+function loadImage(relOrUrl, base = ASSET_BASE) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = () => reject(new Error('Image load error: ' + relOrUrl));
-        img.src = relOrUrl.startsWith('/') ? relOrUrl : ASSET_BASE + relOrUrl;
+        img.src = relOrUrl.startsWith('/') ? relOrUrl : base + relOrUrl;
     });
 }
 function drawWithFilter(ctx, img, filterMode, targetW, targetH) {
@@ -34,6 +35,7 @@ function drawWithFilter(ctx, img, filterMode, targetW, targetH) {
 }
 class SwordsManExplorer {
     constructor() {
+        this.spritesIndexHd = null;
         // Cutscene state
         this.sceneTimer = null;
         this.sceneFrames = [];
@@ -41,7 +43,11 @@ class SwordsManExplorer {
         // Sprite animator state
         this.sprTimer = null;
         this.currentSheetImg = null;
+        this.origSheetImg = null;
+        this.remSheetImg = null;
         this.currentChapterSprites = [];
+        this.origChapterSprites = [];
+        this.hdChapterSprites = [];
         this.currentSprIdx = 0;
         // Audio analyser state
         this.audioCtx = null;
@@ -52,31 +58,58 @@ class SwordsManExplorer {
         this.setupTabs();
         const statusPill = document.getElementById('statusPill');
         try {
-            const [cat, pal, spr, dlg, fnt] = await Promise.all([
+            const [cat, pal, spr, sprHd, dlg, fnt] = await Promise.all([
                 fetchJson('catalog.json'),
                 fetchJson('ui/palette.json'),
                 fetchJson('events/sprites_index.json'),
+                fetchJson('events/sprites_index_hd.json', REMASTER_BASE).catch(() => null),
                 fetchJson('events/dialogues_ko.json'),
                 fetchJson('fonts/font_bitmaps.json'),
             ]);
             this.catalog = cat;
             this.palettes = pal;
             this.spritesIndex = spr;
+            this.spritesIndexHd = sprHd;
             this.dialogues = dlg;
             this.fontBitmaps = fnt;
             statusPill.textContent =
-                `추출 완료 · 인물 ${cat.faces.count} · 스프라이트 ${cat.events.total_sprites} · 대사 ${cat.events.total_dialogues} · 오디오 ${cat.audio.voc_count + cat.audio.adlib_count}`;
+                `Phase 2 리마스터 · 인물 ${cat.faces.count} (4x EPX) · 스프라이트 ${cat.events.total_sprites} (2x EPX) · 대사 ${cat.events.total_dialogues} · 오디오 ${cat.audio.voc_count + cat.audio.adlib_count}`;
             this.renderOverview();
             this.setupCutscenes();
             this.renderFaces();
             this.setupWorld();
             this.setupAudio();
             this.setupDialogues();
+            this.setupGlobalModeToggle();
         }
         catch (err) {
             statusPill.textContent = '로딩 오류: ' + String(err);
             console.error(err);
         }
+    }
+    setupGlobalModeToggle() {
+        const btn = document.getElementById('globalModeToggle');
+        if (!btn)
+            return;
+        btn.addEventListener('click', () => {
+            const nextHd = btn.dataset.mode !== 'remastered';
+            btn.dataset.mode = nextHd ? 'remastered' : 'extracted';
+            btn.textContent = nextHd ? '✨ 리마스터 HD (Phase 2)' : '🕹 원본 DOS 모드 (1993)';
+            btn.classList.toggle('primary', nextHd);
+            const syncSelect = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = val;
+                    el.dispatchEvent(new Event('change'));
+                }
+            };
+            syncSelect('uiFilterSelect', nextHd ? 'remastered' : 'nearest');
+            syncSelect('sceneSourceSelect', nextHd ? 'remastered' : 'extracted');
+            syncSelect('facesGridToggle', nextHd ? 'remastered' : 'extracted');
+            syncSelect('worldRemasterToggle', nextHd ? 'remastered' : 'extracted');
+            syncSelect('vocRemasterToggle', nextHd ? 'remastered' : 'extracted');
+            syncSelect('fontRenderMode', nextHd ? 'phase2' : 'dos');
+        });
     }
     setupTabs() {
         const btns = Array.from(document.querySelectorAll('#tabNav .tab'));
@@ -112,19 +145,79 @@ class SwordsManExplorer {
         const screenSel = document.getElementById('uiScreenSelect');
         const filterSel = document.getElementById('uiFilterSelect');
         const scaleSel = document.getElementById('uiScaleSelect');
+        const splitBar = document.getElementById('uiSplitBar');
+        const splitRange = document.getElementById('uiSplitRange');
+        const splitPct = document.getElementById('uiSplitPct');
         const uiCanvas = document.getElementById('uiCanvas');
         const uiInfo = document.getElementById('uiInfo');
         const redrawUi = async () => {
-            const img = await loadImage(screenSel.value);
             const scale = Number(scaleSel.value) || 2;
-            const w = img.width * scale;
-            const h = img.height * scale;
-            drawWithFilter(uiCanvas.getContext('2d'), img, filterSel.value, w, h);
-            uiInfo.textContent = `원본 ${img.width}×${img.height} → 출력 ${w}×${h} (${filterSel.value})`;
+            const mode = filterSel.value;
+            if (mode === 'remastered') {
+                splitBar.style.display = 'flex';
+                const [origImg, remImg] = await Promise.all([
+                    loadImage(screenSel.value, ASSET_BASE),
+                    loadImage(screenSel.value, REMASTER_BASE),
+                ]);
+                const targetW = origImg.width * scale;
+                const targetH = origImg.height * scale;
+                const ctx = uiCanvas.getContext('2d');
+                ctx.canvas.width = targetW;
+                ctx.canvas.height = targetH;
+                ctx.clearRect(0, 0, targetW, targetH);
+                const pct = Math.max(0, Math.min(100, Number(splitRange.value)));
+                splitPct.textContent = `${pct}%`;
+                const splitX = Math.round((targetW * pct) / 100);
+                // Left side: Original Pixel (Nearest)
+                if (splitX > 0) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(0, 0, splitX, targetH);
+                    ctx.clip();
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(origImg, 0, 0, targetW, targetH);
+                    ctx.restore();
+                }
+                // Right side: Phase 2 Remastered HD
+                if (splitX < targetW) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(splitX, 0, targetW - splitX, targetH);
+                    ctx.clip();
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.drawImage(remImg, 0, 0, targetW, targetH);
+                    ctx.restore();
+                }
+                // Divider line & labels
+                ctx.strokeStyle = '#d4a853';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(splitX, 0);
+                ctx.lineTo(splitX, targetH);
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+                ctx.fillRect(8, 8, 92, 22);
+                ctx.fillRect(Math.max(8, targetW - 118), 8, 110, 22);
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#e8edf5';
+                ctx.fillText('원본 (Pixel)', 14, 23);
+                ctx.fillStyle = '#f2cf7e';
+                ctx.fillText('✨ 리마스터 HD', Math.max(14, targetW - 112), 23);
+                uiInfo.textContent = `A/B 비교 · 원본 ${origImg.width}×${origImg.height} vs 리마스터 ${remImg.width}×${remImg.height} → 출력 ${targetW}×${targetH}`;
+            }
+            else {
+                splitBar.style.display = 'none';
+                const img = await loadImage(screenSel.value, ASSET_BASE);
+                const w = img.width * scale;
+                const h = img.height * scale;
+                drawWithFilter(uiCanvas.getContext('2d'), img, mode, w, h);
+                uiInfo.textContent = `원본 ${img.width}×${img.height} → 출력 ${w}×${h} (${mode})`;
+            }
         };
         screenSel.addEventListener('change', redrawUi);
         filterSel.addEventListener('change', redrawUi);
         scaleSel.addEventListener('change', redrawUi);
+        splitRange.addEventListener('input', redrawUi);
         redrawUi();
         // Palette swatch viewer
         const palSel = document.getElementById('palSelect');
@@ -171,6 +264,7 @@ class SwordsManExplorer {
     // -------------------------------------------------------------------------
     setupCutscenes() {
         const sel = document.getElementById('sceneSelect');
+        const sourceSel = document.getElementById('sceneSourceSelect');
         const filterSel = document.getElementById('sceneFilter');
         const playBtn = document.getElementById('scenePlayBtn');
         const prevBtn = document.getElementById('scenePrevBtn');
@@ -191,6 +285,7 @@ class SwordsManExplorer {
             d9: 'audio/adlib/d9_theme.wav',
             gt: 'audio/adlib/mfx0_02.wav',
         };
+        const getBase = () => (sourceSel && sourceSel.value === 'extracted' ? ASSET_BASE : REMASTER_BASE);
         const stopPlay = () => {
             if (this.sceneTimer !== null) {
                 window.clearInterval(this.sceneTimer);
@@ -211,31 +306,35 @@ class SwordsManExplorer {
         const loadScene = async () => {
             stopPlay();
             const key = sel.value;
+            const base = getBase();
+            const isHd = base === REMASTER_BASE;
             const entry = this.catalog.cutscenes[key];
             if (!entry)
                 return;
             speedInput.value = String(entry.frame_ms || 120);
+            const outW = isHd && entry.width <= 320 ? entry.width * 2 : entry.width;
+            const outH = isHd && entry.height <= 200 ? entry.height * 2 : entry.height;
             metaBox.innerHTML =
-                `<strong>${key.toUpperCase()}</strong> · 해상도: ${entry.width}×${entry.height} · 총 프레임: ${entry.frames.length}`;
+                `<strong>${key.toUpperCase()}</strong> [${isHd ? '✨ 리마스터 HD' : '원본 DOS'}] · 해상도: ${outW}×${outH} · 총 프레임: ${entry.frames.length}`;
             if (entry.gif) {
-                gifPreview.src = ASSET_BASE + entry.gif;
+                gifPreview.src = base + entry.gif;
                 gifPreview.style.display = 'block';
             }
             else {
                 gifPreview.style.display = 'none';
             }
             const bgm = bgmMap[key] || 'audio/adlib/tit_theme.wav';
-            audio.src = ASSET_BASE + bgm;
-            bgmLabel.textContent = '연동 BGM: ' + bgm.split('/').pop();
+            audio.src = base + bgm;
+            bgmLabel.textContent = (isHd ? '✨ 리마스터 Chorus/Hall BGM: ' : '원본 AdLib BGM: ') + bgm.split('/').pop();
             frameLabel.textContent = '프레임 로딩 중...';
             // Progressive load first frame immediately then remaining
             this.sceneFrames = [];
-            const firstImg = await loadImage(entry.frames[0]);
+            const firstImg = await loadImage(entry.frames[0], base);
             this.sceneFrames = new Array(entry.frames.length).fill(firstImg);
             scrubber.max = String(Math.max(0, entry.frames.length - 1));
             renderFrame(0);
-            Promise.all(entry.frames.map((p) => loadImage(p))).then((imgs) => {
-                if (sel.value === key) {
+            Promise.all(entry.frames.map((p) => loadImage(p, base))).then((imgs) => {
+                if (sel.value === key && getBase() === base) {
                     this.sceneFrames = imgs;
                     renderFrame(this.scenePos);
                 }
@@ -260,6 +359,7 @@ class SwordsManExplorer {
         scrubber.addEventListener('input', () => renderFrame(Number(scrubber.value)));
         filterSel.addEventListener('change', () => renderFrame(this.scenePos));
         sel.addEventListener('change', loadScene);
+        sourceSel === null || sourceSel === void 0 ? void 0 : sourceSel.addEventListener('change', loadScene);
         loadScene();
     }
     // -------------------------------------------------------------------------
@@ -268,6 +368,8 @@ class SwordsManExplorer {
     renderFaces() {
         const grid = document.getElementById('facesGrid');
         const search = document.getElementById('faceSearch');
+        const gridToggle = document.getElementById('facesGridToggle');
+        const remLabel = document.getElementById('faceRemasterLabel');
         const origC = document.getElementById('faceOrigCanvas');
         const nearC = document.getElementById('faceNearCanvas');
         const smoothC = document.getElementById('faceSmoothCanvas');
@@ -278,23 +380,29 @@ class SwordsManExplorer {
             selectedId = idx;
             const pad = String(idx).padStart(3, '0');
             selLabel.textContent = pad;
-            const img = await loadImage(`faces/face_${pad}.png`);
-            drawWithFilter(origC.getContext('2d'), img, 'nearest', 50, 50);
-            drawWithFilter(nearC.getContext('2d'), img, 'nearest', 200, 200);
-            drawWithFilter(smoothC.getContext('2d'), img, 'smooth', 200, 200);
+            const [origImg, hdImg] = await Promise.all([
+                loadImage(`faces/face_${pad}.png`, ASSET_BASE),
+                loadImage(`faces/face_${pad}.png`, REMASTER_BASE),
+            ]);
+            drawWithFilter(origC.getContext('2d'), origImg, 'nearest', 50, 50);
+            drawWithFilter(nearC.getContext('2d'), origImg, 'nearest', 200, 200);
+            drawWithFilter(smoothC.getContext('2d'), hdImg, 'smooth', 200, 200);
+            if (remLabel)
+                remLabel.textContent = 'Phase 2 리마스터 HD (200×200 EPX)';
             Array.from(grid.children).forEach((el) => {
                 el.classList.toggle('active', Number(el.dataset.id) === idx);
             });
         };
         const populate = (filterStr) => {
             const f = filterStr.trim();
+            const base = gridToggle && gridToggle.value === 'extracted' ? ASSET_BASE : REMASTER_BASE;
             const items = [];
             for (let i = 0; i < count; i++) {
                 const pad = String(i).padStart(3, '0');
                 if (f && !pad.includes(f) && !String(i).includes(f))
                     continue;
                 items.push(`<div class="face-item ${i === selectedId ? 'active' : ''}" data-id="${i}">
-            <img src="${ASSET_BASE}faces/face_${pad}.png" alt="#${pad}" loading="lazy" />
+            <img src="${base}faces/face_${pad}.png" alt="#${pad}" loading="lazy" />
             <span>#${pad}</span>
           </div>`);
             }
@@ -307,6 +415,7 @@ class SwordsManExplorer {
             }
         });
         search.addEventListener('input', () => populate(search.value));
+        gridToggle === null || gridToggle === void 0 ? void 0 : gridToggle.addEventListener('change', () => populate(search.value));
         populate('');
         selectFace(0);
     }
@@ -315,11 +424,14 @@ class SwordsManExplorer {
     // -------------------------------------------------------------------------
     setupWorld() {
         const chSel = document.getElementById('chapterSelect');
+        const modeToggle = document.getElementById('worldRemasterToggle');
         const chStats = document.getElementById('chapterStats');
         const mapLabel = document.getElementById('mapChLabel');
+        const mapResLabel = document.getElementById('mapResLabel');
         const mapCanvas = document.getElementById('mapCanvas');
         const worldMetaBox = document.getElementById('worldMetaBox');
         const sheetCanvas = document.getElementById('sheetCanvas');
+        const sprOrigCanvas = document.getElementById('spriteOrigCanvas');
         const zoomCanvas = document.getElementById('spriteZoomCanvas');
         const detailMeta = document.getElementById('spriteDetailMeta');
         const sprIdxLabel = document.getElementById('sprIdxLabel');
@@ -341,44 +453,71 @@ class SwordsManExplorer {
                 return;
             this.currentSprIdx = (idx + this.currentChapterSprites.length) % this.currentChapterSprites.length;
             const sp = this.currentChapterSprites[this.currentSprIdx];
+            const origSp = this.origChapterSprites[this.currentSprIdx] || sp;
+            const hdSp = this.hdChapterSprites[this.currentSprIdx] || sp;
             sprIdxLabel.textContent = `${this.currentSprIdx + 1} / ${this.currentChapterSprites.length}`;
+            if (sprOrigCanvas && this.origSheetImg) {
+                const octx = sprOrigCanvas.getContext('2d');
+                octx.clearRect(0, 0, sprOrigCanvas.width, sprOrigCanvas.height);
+                octx.imageSmoothingEnabled = false;
+                const oScale = Math.max(1, Math.min(3, Math.floor((sprOrigCanvas.width - 16) / Math.max(1, origSp.w, origSp.h))));
+                const odw = origSp.w * oScale;
+                const odh = origSp.h * oScale;
+                const odx = Math.floor((sprOrigCanvas.width - odw) / 2);
+                const ody = Math.floor((sprOrigCanvas.height - odh) / 2);
+                octx.drawImage(this.origSheetImg, origSp.sx, origSp.sy, origSp.w, origSp.h, odx, ody, odw, odh);
+            }
+            const hdImg = this.remSheetImg || this.currentSheetImg;
             const zctx = zoomCanvas.getContext('2d');
             zctx.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
             zctx.imageSmoothingEnabled = false;
-            const scale = Math.max(1, Math.min(4, Math.floor(176 / Math.max(sp.w, sp.h))));
-            const dw = sp.w * scale;
-            const dh = sp.h * scale;
+            const zScale = Math.max(1, Math.min(3, Math.floor((zoomCanvas.width - 16) / Math.max(1, hdSp.w, hdSp.h))));
+            const dw = hdSp.w * zScale;
+            const dh = hdSp.h * zScale;
             const dx = Math.floor((zoomCanvas.width - dw) / 2);
             const dy = Math.floor((zoomCanvas.height - dh) / 2);
-            zctx.drawImage(this.currentSheetImg, sp.sx, sp.sy, sp.w, sp.h, dx, dy, dw, dh);
+            zctx.drawImage(hdImg, hdSp.sx, hdSp.sy, hdSp.w, hdSp.h, dx, dy, dw, dh);
             detailMeta.innerHTML =
-                `<div><strong>Entry ID:</strong> #${sp.id}</div>` +
-                    `<div><strong>크기:</strong> ${sp.w} × ${sp.h} px (${scale}x 확대)</div>` +
-                    `<div><strong>원본 VGA 오프셋:</strong> (${sp.orig_x}, ${sp.orig_y})</div>` +
-                    `<div><strong>시트 좌표:</strong> (${sp.sx}, ${sp.sy})</div>`;
+                `<div><strong>Entry ID:</strong> #${origSp.id}</div>` +
+                    `<div><strong>원본:</strong> ${origSp.w}×${origSp.h} px → <strong>2x EPX HD:</strong> ${hdSp.w}×${hdSp.h} px</div>` +
+                    `<div><strong>원본 VGA 오프셋:</strong> (${origSp.orig_x}, ${origSp.orig_y})</div>` +
+                    `<div><strong>활성 시트 좌표:</strong> (${sp.sx}, ${sp.sy})</div>`;
             // Highlight selected box on sheet
             const sctx = sheetCanvas.getContext('2d');
             sctx.clearRect(0, 0, sheetCanvas.width, sheetCanvas.height);
             sctx.drawImage(this.currentSheetImg, 0, 0);
             sctx.strokeStyle = '#d4a853';
-            sctx.lineWidth = 2;
+            sctx.lineWidth = Math.max(2, Math.round(sheetCanvas.width / 400));
             sctx.strokeRect(sp.sx - 1, sp.sy - 1, sp.w + 2, sp.h + 2);
         };
         const loadChapter = async (ch) => {
             stopSprAnim();
             mapLabel.textContent = String(ch);
+            const isHd = !modeToggle || modeToggle.value === 'remastered';
             const mapInfo = this.catalog.world.maps[ch];
             const stkInfo = this.catalog.world.stk[ch];
             const sprCh = this.spritesIndex.chapters[ch];
+            const hdCh = (this.spritesIndexHd && this.spritesIndexHd.chapters[ch]) || sprCh;
             chStats.textContent = `타일 종류 ${mapInfo.unique_tile_ids} · 비영점 셀 ${mapInfo.non_zero_cells}/16,384 · STK ${stkInfo.non_zero}B`;
+            if (mapResLabel) {
+                mapResLabel.textContent = isHd ? '512×512 리마스터 (4x EPX)' : '128×128 원본';
+            }
             worldMetaBox.innerHTML =
-                `<strong>MAP.${ch}</strong> (${mapInfo.width}×${mapInfo.height} = 16,384B) · 고유 타일 ID: ${mapInfo.unique_tile_ids}개<br>` +
+                `<strong>MAP.${ch}</strong> (${isHd ? '512×512 EPX HD' : '128×128 원본'}) · 고유 타일 ID: ${mapInfo.unique_tile_ids}개<br>` +
                     `<strong>STK.${ch}</strong>: ${stkInfo.bytes.toLocaleString()}B (활성 ${stkInfo.non_zero.toLocaleString()}B)<br>` +
                     `<strong>공통:</strong> REGION (${this.catalog.world.region.rows}×${this.catalog.world.region.stride}) · SEED.TBL (${this.catalog.world.seed_tbl_decompressed_bytes}B)`;
-            const mapImg = await loadImage(mapInfo.image);
-            drawWithFilter(mapCanvas.getContext('2d'), mapImg, 'nearest', 384, 384);
-            this.currentSheetImg = await loadImage(sprCh.sheet);
-            this.currentChapterSprites = sprCh.sprites;
+            const [mapImg, origSheet, hdSheet] = await Promise.all([
+                loadImage(mapInfo.image, isHd ? REMASTER_BASE : ASSET_BASE),
+                loadImage(sprCh.sheet, ASSET_BASE),
+                this.spritesIndexHd ? loadImage(hdCh.sheet, REMASTER_BASE).catch(() => null) : Promise.resolve(null),
+            ]);
+            drawWithFilter(mapCanvas.getContext('2d'), mapImg, isHd ? 'smooth' : 'nearest', 384, 384);
+            this.origSheetImg = origSheet;
+            this.remSheetImg = hdSheet || origSheet;
+            this.origChapterSprites = sprCh.sprites;
+            this.hdChapterSprites = hdSheet ? hdCh.sprites : sprCh.sprites;
+            this.currentSheetImg = isHd ? this.remSheetImg : this.origSheetImg;
+            this.currentChapterSprites = isHd ? this.hdChapterSprites : this.origChapterSprites;
             sheetCanvas.width = this.currentSheetImg.width;
             sheetCanvas.height = this.currentSheetImg.height;
             drawSpriteFrame(0);
@@ -402,6 +541,7 @@ class SwordsManExplorer {
         prevBtn.addEventListener('click', () => drawSpriteFrame(this.currentSprIdx - 1));
         nextBtn.addEventListener('click', () => drawSpriteFrame(this.currentSprIdx + 1));
         chSel.addEventListener('change', () => loadChapter(Number(chSel.value)));
+        modeToggle === null || modeToggle === void 0 ? void 0 : modeToggle.addEventListener('change', () => loadChapter(Number(chSel.value)));
         loadChapter(0);
     }
     // -------------------------------------------------------------------------
@@ -411,6 +551,7 @@ class SwordsManExplorer {
         const player = document.getElementById('mainAudioPlayer');
         const nowPlaying = document.getElementById('audioNowPlaying');
         const rateSel = document.getElementById('vocRateSelect');
+        const vocToggle = document.getElementById('vocRemasterToggle');
         const adlibList = document.getElementById('adlibList');
         const vocList = document.getElementById('vocList');
         const bankFilter = document.getElementById('vocBankFilter');
@@ -451,12 +592,12 @@ class SwordsManExplorer {
             };
             renderWave();
         };
-        const playTrack = (relPath, label, isVoc) => {
+        const playTrack = (relPath, label, isVoc, base = REMASTER_BASE) => {
             ensureAnalyser();
             if (this.audioCtx && this.audioCtx.state === 'suspended') {
                 this.audioCtx.resume().catch(() => { });
             }
-            player.src = ASSET_BASE + relPath;
+            player.src = base + relPath;
             player.playbackRate = isVoc ? Number(rateSel.value) || 1.0 : 1.0;
             nowPlaying.textContent = label;
             player.play().catch(() => { });
@@ -474,7 +615,8 @@ class SwordsManExplorer {
               <div class="hint">${t.duration_sec}s · ${t.notes} 음표 · 악기 ${t.instruments}개</div>
             </div>
             <div class="controls-inline">
-              <button class="btn primary play-adlib" data-src="${t.wav}" data-label="[AdLib] ${t.title}">▶ WAV</button>
+              <button class="btn play-adlib" data-base="extracted" data-src="${t.wav}" data-label="[원본 AdLib] ${t.title}">▶ 원본</button>
+              <button class="btn primary play-adlib" data-base="remastered" data-src="${t.wav}" data-label="[✨ HD AdLib] ${t.title}">✨ HD</button>
               <a class="btn" href="${ASSET_BASE}${t.midi}" download>MIDI</a>
             </div>
           </div>`)
@@ -482,29 +624,46 @@ class SwordsManExplorer {
         adlibList.addEventListener('click', (e) => {
             const btn = e.target.closest('.play-adlib');
             if (btn && btn.dataset.src) {
-                playTrack(btn.dataset.src, btn.dataset.label || btn.dataset.src, false);
+                const base = btn.dataset.base === 'extracted' ? ASSET_BASE : REMASTER_BASE;
+                playTrack(btn.dataset.src, btn.dataset.label || btn.dataset.src, false, base);
             }
         });
         const renderVocList = () => {
             const bank = bankFilter.value;
+            const defaultHd = !vocToggle || vocToggle.value === 'remastered';
             const filtered = this.catalog.audio.voc.filter((v) => bank === 'ALL' || v.bank === bank);
             vocList.innerHTML = filtered
-                .map((v) => `<div class="list-row clickable play-voc" data-src="${v.file}" data-label="[VOC] ${v.id}">
+                .map((v) => `<div class="list-row clickable voc-row" data-src="${v.file}" data-id="${v.id}">
               <div>
-                <span class="badge">${v.bank}</span> <strong>${v.id}</strong>
-                <span class="hint">(${v.bytes.toLocaleString()}B · ${v.duration_sec}s @ 8kHz)</span>
+                <span class="badge">${v.bank}</span>
+                ${defaultHd ? '<span class="badge gold">22kHz HD</span>' : '<span class="badge">8kHz 원본</span>'}
+                <strong>${v.id}</strong>
+                <span class="hint">(${v.bytes.toLocaleString()}B · ${v.duration_sec}s)</span>
               </div>
-              <button class="btn">▶ 재생</button>
+              <div class="controls-inline">
+                <button class="btn play-voc-btn" data-base="extracted" data-src="${v.file}" data-label="[원본 VOC] ${v.id}">▶ 원본</button>
+                <button class="btn primary play-voc-btn" data-base="remastered" data-src="${v.file}" data-label="[✨ HD VOC] ${v.id}">✨ HD</button>
+              </div>
             </div>`)
                 .join('');
         };
         vocList.addEventListener('click', (e) => {
-            const row = e.target.closest('.play-voc');
+            const btn = e.target.closest('.play-voc-btn');
+            if (btn && btn.dataset.src) {
+                const base = btn.dataset.base === 'extracted' ? ASSET_BASE : REMASTER_BASE;
+                playTrack(btn.dataset.src, btn.dataset.label || btn.dataset.src, true, base);
+                return;
+            }
+            const row = e.target.closest('.voc-row');
             if (row && row.dataset.src) {
-                playTrack(row.dataset.src, row.dataset.label || row.dataset.src, true);
+                const isHd = !vocToggle || vocToggle.value === 'remastered';
+                const base = isHd ? REMASTER_BASE : ASSET_BASE;
+                const prefix = isHd ? '[✨ HD VOC]' : '[원본 VOC]';
+                playTrack(row.dataset.src, `${prefix} ${row.dataset.id || row.dataset.src}`, true, base);
             }
         });
         bankFilter.addEventListener('change', renderVocList);
+        vocToggle === null || vocToggle === void 0 ? void 0 : vocToggle.addEventListener('change', renderVocList);
         renderVocList();
     }
     // -------------------------------------------------------------------------
@@ -517,6 +676,8 @@ class SwordsManExplorer {
         const kfontInput = document.getElementById('kfontInput');
         const kfontCanvas = document.getElementById('kfontCanvas');
         const modeSel = document.getElementById('fontRenderMode');
+        const kfontSheetImg = document.getElementById('kfontSheetImg');
+        const kfontSheetLabel = document.getElementById('kfontSheetLabel');
         chSel.innerHTML =
             `<option value="-1">전체 챕터 (${this.dialogues.total_lines}줄)</option>` +
                 this.dialogues.chapters
@@ -530,22 +691,84 @@ class SwordsManExplorer {
             ctx.fillStyle = '#07090e';
             ctx.fillRect(0, 0, w, h);
             const text = kfontInput.value || '';
-            const isRemaster = modeSel.value === 'remaster';
+            const mode = modeSel.value;
+            const isPhase2 = mode === 'phase2';
+            const isRemaster = mode === 'remaster' || isPhase2;
+            if (kfontSheetImg) {
+                const hdSrc = `${REMASTER_BASE}fonts/kfont_15_hangul_hd.png`;
+                const origSrc = `${ASSET_BASE}fonts/kfont_15_hangul.png`;
+                const want = mode === 'dos' || mode === 'pixel' ? origSrc : hdSrc;
+                if (!kfontSheetImg.src.endsWith(want))
+                    kfontSheetImg.src = want;
+            }
+            if (kfontSheetLabel) {
+                kfontSheetLabel.textContent =
+                    mode === 'dos' || mode === 'pixel'
+                        ? '원본 KFONT.15 한글 2,350자 전체 시트:'
+                        : 'Phase 2 KFONT.15 EPX 2x 리마스터 시트 미리보기:';
+            }
             let cursorX = 12;
             let cursorY = 14;
             const maxW = w - 20;
-            const drawGlyphBits = (hex, cols, gx, gy, color) => {
-                ctx.fillStyle = color;
+            const decodeBitmap = (hex, cols) => {
+                const grid = [];
                 const bytesPerRow = cols === 16 ? 2 : 1;
                 for (let r = 0; r < 16; r++) {
                     const rowHex = hex.slice(r * bytesPerRow * 2, (r + 1) * bytesPerRow * 2);
                     const val = parseInt(rowHex, 16) || 0;
+                    const row = [];
                     for (let c = 0; c < cols; c++) {
-                        if ((val >> (cols - 1 - c)) & 1) {
-                            ctx.fillRect(gx + c * scale, gy + r * scale, scale, scale);
+                        row.push((val >> (cols - 1 - c)) & 1);
+                    }
+                    grid.push(row);
+                }
+                return grid;
+            };
+            const drawGlyphBits = (hex, cols, gx, gy, fill) => {
+                ctx.fillStyle = fill;
+                const grid = decodeBitmap(hex, cols);
+                if (!isPhase2) {
+                    for (let r = 0; r < 16; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            if (grid[r][c]) {
+                                ctx.fillRect(gx + c * scale, gy + r * scale, scale, scale);
+                            }
                         }
                     }
+                    return;
                 }
+                // Binary EPX / Scale2x curve smoothing on 2x subpixel grid (1px per subpixel = same 16*2=32px size)
+                const at = (rr, cc) => rr >= 0 && rr < 16 && cc >= 0 && cc < cols ? grid[rr][cc] : 0;
+                for (let r = 0; r < 16; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const p = at(r, c);
+                        const a = at(r - 1, c);
+                        const b = at(r, c + 1);
+                        const cl = at(r, c - 1);
+                        const d = at(r + 1, c);
+                        const e0 = cl === a && cl !== d && a !== b ? a : p;
+                        const e1 = a === b && a !== cl && b !== d ? b : p;
+                        const e2 = d === cl && d !== b && cl !== a ? cl : p;
+                        const e3 = b === d && b !== a && d !== cl ? d : p;
+                        if (e0)
+                            ctx.fillRect(gx + c * 2, gy + r * 2, 1, 1);
+                        if (e1)
+                            ctx.fillRect(gx + c * 2 + 1, gy + r * 2, 1, 1);
+                        if (e2)
+                            ctx.fillRect(gx + c * 2, gy + r * 2 + 1, 1, 1);
+                        if (e3)
+                            ctx.fillRect(gx + c * 2 + 1, gy + r * 2 + 1, 1, 1);
+                    }
+                }
+            };
+            const makeFill = (gy) => {
+                if (!isPhase2)
+                    return isRemaster ? '#ffe9b8' : '#f2e0b2';
+                const grad = ctx.createLinearGradient(0, gy, 0, gy + 16 * scale);
+                grad.addColorStop(0, '#fff4cf');
+                grad.addColorStop(0.5, '#f4d078');
+                grad.addColorStop(1, '#cf9435');
+                return grad;
             };
             for (let i = 0; i < text.length; i++) {
                 const ch = text[i];
@@ -562,9 +785,9 @@ class SwordsManExplorer {
                         cursorY += 20 * scale;
                     }
                     if (isRemaster) {
-                        drawGlyphBits(glyphHex, 8, cursorX + 2, cursorY + 2, '#111622');
+                        drawGlyphBits(glyphHex, 8, cursorX + 2, cursorY + 2, isPhase2 ? '#1a0c0c' : '#111622');
                     }
-                    drawGlyphBits(glyphHex, 8, cursorX, cursorY, isRemaster ? '#ffe9b8' : '#e6d2a0');
+                    drawGlyphBits(glyphHex, 8, cursorX, cursorY, isPhase2 ? makeFill(cursorY) : isRemaster ? '#ffe9b8' : '#e6d2a0');
                     cursorX += 9 * scale;
                 }
                 else {
@@ -575,9 +798,9 @@ class SwordsManExplorer {
                     }
                     if (glyphHex) {
                         if (isRemaster) {
-                            drawGlyphBits(glyphHex, 16, cursorX + 2, cursorY + 2, '#2b1212');
+                            drawGlyphBits(glyphHex, 16, cursorX + 2, cursorY + 2, isPhase2 ? '#240d0d' : '#2b1212');
                         }
-                        drawGlyphBits(glyphHex, 16, cursorX, cursorY, isRemaster ? '#ffe9b8' : '#f2e0b2');
+                        drawGlyphBits(glyphHex, 16, cursorX, cursorY, makeFill(cursorY));
                     }
                     else {
                         ctx.fillStyle = '#d4a853';
