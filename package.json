@@ -1,0 +1,15 @@
+{
+  "name": "swordsman-remaster",
+  "version": "0.1.0",
+  "description": "SwordsMan (1993 Soft-World / 소오강호) TypeScript + Canvas Web Remaster & Asset Explorer",
+  "private": true,
+  "scripts": {
+    "extract": "python tools/extract_assets.py",
+    "build": "tsc",
+    "start": "node server.js",
+    "dev": "tsc && node server.js"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  }
+}

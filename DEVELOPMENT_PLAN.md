@@ -37,9 +37,9 @@
 | **챕터/스프라이트/스크립트** | `EVENT/EVENT.0~14` | LZSS 해제 후 상단 32B 헤더(16개 워드) + 32-bit 오프셋 테이블. 14개 데이터 섹션(`PARM`, `PHASE`, `ACTION`, `MAGIC`, `TER`, `COMD`, `SCHED`, `NPC`, `BULLET`, `ILLUS`, `ITEM`, `EVENT`, `CHINE`, `VECT`)과 RLE(`0x69e0e`) 스프라이트 내장 |
 | **월드/맵/오브젝트** | `REGION`, `MAP/MAP.0~14`, `STK/STK.0~14` | `REGION`(128B × 200개 비압축)이 `map/event/stk/mfx/voc` ID 매핑. `MAP`/`STK`는 LZSS 해제 시 각 `16,384B` |
 | **인물 초상화 / UI** | `FACE.GRP`, `FACE.PAL`, `CFGLBM`, `CFGLBM0`, `PASS01~02.PCX` | `FACE.GRP`(`398,100B`) = `2,654B`(`0xA5E`) × 150개 RLE 초상화(`50×50`, `FACE.PAL` 6-bit RGB VGA 팔레트). `CFGLBM*`는 해제 시 `320×200 + 768B` 팔레트 |
-| **오프닝/엔딩 컷신** | `EM/GT.GRP`, `EM/TIT.GRP`, `EM/EM1~3.GRP`, `EM/D9.GRP` (+`.IDX`) | `.IDX`는 끝 오프셋 `uint32` 배열. `GT`/`TIT`는 VGA 16색 4-Plane(`640×480` / `640×300`). `EM1~3`/`D9`는 `768B` 256색 팔레트 + `320×200` 배경/서브블록/RLE 델타 프레임 |
-| **디지털 음성/효과음** | `VOC/VOC0.GRP`, `EM/*V.GRP` (+`.IDX`) | `.IDX` 32-bit 엔트리(`end_offset = v >> 8`, `id = v & 0xff`). `8-bit Unsigned PCM` (`11,025Hz`, Mono) |
-| **OPL2 FM 배경음악/SFX** | `MFX/MFX0.GRP`(+`.IDX`), `EM/TIT.M`, `EM/EM1.M`, `EM/D9.M` | `MFX0.GRP`는 LZSS 해제(`26,803B`) 후 16트랙 분리. `ADLIB.BIN`(`0x946`) OPL2 레지스터 시퀀스 바이트코드 (`72.81Hz` 틱) |
+| **오프닝/엔딩 컷신** | `EM/GT.GRP`, `EM/TIT.GRP`, `EM/EM1~3.GRP`, `EM/D9.GRP` (+`.IDX`) | `.IDX`는 끝 오프셋 `uint32` 배열. `GT`/`TIT`는 VGA 16색 4-Plane 연속 평면(`640×480` / `640×300`). `EM1~3`/`D9`는 `768B` 256색 팔레트, `4,096B` 페이드 LUT + `320×200` 키프레임/`0xFF` 투명 사각 블록/`0xFF`·`0x00` RLE 델타 프레임 |
+| **디지털 음성/효과음** | `VOC/VOC0.GRP`, `EM/*V.GRP` (+`.IDX`) | `.IDX` 32-bit 끝 오프셋 테이블(`idx[i] - idx[i-1]` 길이). `8-bit Unsigned PCM` (`8,000Hz` 기본, Mono, `VOC0` 말미 `0x270e6` 이후는 도스 도구 슬랙 제외 14클립 유효) |
+| **OPL2 FM 배경음악/SFX** | `MFX/MFX0.GRP`(+`.IDX`), `EM/TIT.M`, `EM/EM1.M`, `EM/D9.M` | `MFX0.GRP`는 LZSS 해제(`26,803B`) 후 16트랙 분리. `ADLIB.BIN`(`0x946`) OPL2 레지스터 시퀀스 바이트코드 (`72.8Hz` PIT 0x4006 틱, 14B 악기 패치) |
 | **한글/영문 폰트** | `KFONT.15`, `EM/FONT.E16` | `KFONT.15`(`279,744B`) KS X 1001 16×16 한글 완성형 2,350자(32B/자), `FONT.E16`(`2,048B`) 8×16 영문 128자 |
 
 ### 2.3 원작의 알려진 문제점 및 해결 방안
@@ -59,11 +59,11 @@
 
 ## 4. 단계별 개발 로드맵 (Phase 1 ~ 4)
 
-* **Phase 1: 에셋 전수 추출 파이프라인 및 웹 에셋 브라우저 구축** *(현재 착수)*
+* **Phase 1: 에셋 전수 추출 파이프라인 및 웹 에셋 브라우저 구축** *(완료)*
   * [x] `sm/` 원본 리버스 엔지니어링 완료
-  * [ ] `tools/extract_assets.py` 작성 및 전체 그래픽·동영상·음성·BGM·폰트·대사 무손실 추출 (`assets/extracted/`)
-  * [ ] 포트 `5188` 웹 에셋 브라우저(오프닝/엔딩 플레이어, 초상화 뷰어, 챕터 스프라이트/맵 탐색기, 오디오 스튜디오, 대사·한글 폰트 사전) 구축 및 검증
-  * [ ] Phase 1 완료 GitHub 동기화
+  * [x] `tools/extract_assets.py` 작성 및 전체 에셋 무손실 추출 완료 (`assets/extracted/`, **1,189파일 / 77.76MB**: 인물 150, 컷신 6편/842프레임+GIF, 월드맵 15, 챕터 스프라이트 7,604개, 한글 대사 652줄, PCM WAV 103개, AdLib OPL2 WAV+MIDI 19트랙, KFONT.15 완성형 한글 2,350자)
+  * [x] 포트 `5188` 웹 에셋 브라우저(`server.js`, `src/main.ts`, `public/`) 구축 및 6개 탭·콘솔/네트워크 무오류 검증 완료
+  * [x] Phase 1 완료 GitHub 동기화 (`schuna/SwordsMan`)
 * **Phase 2: 화질·음질 개선 파이프라인 적용**
   * 타일/스프라이트 투명 RGBA 분리 및 픽셀아트 특화 xBRZ/AI 업스케일링 (4× 고해상도 팩 생성)
   * 초상화(`FACE.GRP`) 150종 및 컷신(`TIT`, `GT`, `EM1~3`, `D9`) 디더링 제거 및 일러스트 고화질화

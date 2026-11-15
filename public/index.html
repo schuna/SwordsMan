@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>소오강호 (SwordsMan 1993) — 리마스터 에셋 익스플로러 &amp; 테스트베드</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="seal">笑傲</div>
+      <div>
+        <h1>소오강호 (동방불패 · SwordsMan 1993) Remaster Studio</h1>
+        <p class="subtitle">Phase 1 · Soft-World v0.68 100% 추출 에셋 뷰어 &amp; Web Canvas/OPL2/KFONT 테스트베드 (Port 5188)</p>
+      </div>
+    </div>
+    <div class="status-pill" id="statusPill">로딩 중...</div>
+  </header>
+
+  <nav class="tabs" id="tabNav">
+    <button class="tab active" data-tab="overview">1. 개요 · 팔레트/UI</button>
+    <button class="tab" data-tab="cutscenes">2. 컷신 시어터</button>
+    <button class="tab" data-tab="faces">3. 인물 초상화 (150)</button>
+    <button class="tab" data-tab="world">4. 월드맵 · 챕터 스프라이트</button>
+    <button class="tab" data-tab="audio">5. 오디오 스튜디오 (VOC/OPL2)</button>
+    <button class="tab" data-tab="dialogues">6. 대사 · KFONT.15</button>
+  </nav>
+
+  <main class="container">
+    <!-- TAB 1: Overview -->
+    <section class="panel active" id="tab-overview">
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head">
+            <h2>화면 업스케일 &amp; CRT 필터 비교기</h2>
+            <div class="controls-inline">
+              <select id="uiScreenSelect">
+                <option value="ui/cfglbm.png">CFGLBM (메인 UI)</option>
+                <option value="ui/cfglbm0.png">CFGLBM0 (보조 UI)</option>
+                <option value="ui/pass01.png">PASS01.PCX (암호표 1)</option>
+                <option value="ui/pass02.png">PASS02.PCX (암호표 2)</option>
+                <option value="ui/pass_ref.png">pass.PNG (참조표)</option>
+              </select>
+              <select id="uiFilterSelect">
+                <option value="nearest">Nearest (도스 원본 픽셀)</option>
+                <option value="smooth">Bilinear Smooth</option>
+                <option value="crt">CRT 스캔라인 + 글로우</option>
+              </select>
+              <select id="uiScaleSelect">
+                <option value="1">1x</option>
+                <option value="2" selected>2x</option>
+                <option value="3">3x</option>
+              </select>
+            </div>
+          </div>
+          <div class="canvas-stage" id="uiStage">
+            <canvas id="uiCanvas" width="640" height="400"></canvas>
+          </div>
+          <p class="hint" id="uiInfo">320×200 VGA 원본 해상도를 Web Canvas에서 실시간 필터링합니다.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>VGA 256색 팔레트 뷰어</h2>
+            <select id="palSelect">
+              <option value="face_pal">FACE.PAL (인물/스프라이트 기본)</option>
+              <option value="pal_idx_0">PAL.IDX [0]</option>
+              <option value="pal_idx_1">PAL.IDX [1]</option>
+              <option value="pal_idx_2">PAL.IDX [2]</option>
+              <option value="pal_idx_3">PAL.IDX [3]</option>
+              <option value="pal_idx_4">PAL.IDX [4]</option>
+            </select>
+          </div>
+          <canvas id="palCanvas" width="384" height="384" class="pal-canvas"></canvas>
+          <div class="pal-readout" id="palReadout">팔레트 셀에 마우스를 올리면 인덱스와 RGB 헥스 코드가 표시됩니다.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Cutscenes -->
+    <section class="panel" id="tab-cutscenes">
+      <div class="two-col wide-left">
+        <div class="card">
+          <div class="card-head">
+            <h2>오프닝 &amp; 엔딩 시어터</h2>
+            <div class="controls-inline">
+              <select id="sceneSelect">
+                <option value="tit">TIT.GRP (오프닝 서화 타이틀 · 640×300)</option>
+                <option value="em1">EM1.GRP (프롤로그 1 · 320×200)</option>
+                <option value="em2">EM2.GRP (프롤로그 2 · 320×200)</option>
+                <option value="em3">EM3.GRP (프롤로그 3 · 320×200)</option>
+                <option value="d9">D9.GRP (엔딩/메인이벤트 · 320×200)</option>
+                <option value="gt">GT.GRP (타이틀/크레딧 · 640×480)</option>
+              </select>
+              <select id="sceneFilter">
+                <option value="nearest">Nearest</option>
+                <option value="crt" selected>CRT Scanline</option>
+                <option value="smooth">Smooth Upscale</option>
+              </select>
+            </div>
+          </div>
+          <div class="canvas-stage dark-stage">
+            <canvas id="sceneCanvas" width="640" height="400"></canvas>
+          </div>
+          <div class="player-bar">
+            <button id="scenePlayBtn" class="btn primary">▶ 재생 (음악 동기화)</button>
+            <button id="scenePrevBtn" class="btn">◀ 이전</button>
+            <button id="sceneNextBtn" class="btn">다음 ▶</button>
+            <input type="range" id="sceneScrubber" min="0" max="0" value="0" />
+            <span id="sceneFrameLabel" class="mono">0 / 0</span>
+          </div>
+          <div class="player-bar">
+            <label>프레임 간격(ms): <input type="number" id="sceneSpeedInput" value="100" min="30" max="2000" step="10" style="width:70px"/></label>
+            <span id="sceneBgmLabel" class="hint">연동 BGM: -</span>
+            <audio id="sceneAudio" controls style="height:28px;flex:1;max-width:300px"></audio>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>GIF 프리뷰 &amp; 장면 정보</h2></div>
+          <div id="sceneMetaBox" class="meta-box"></div>
+          <div class="gif-preview-wrap">
+            <img id="sceneGifPreview" alt="Cutscene GIF preview" style="display:none;max-width:100%;border-radius:6px;border:1px solid var(--border)" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Faces -->
+    <section class="panel" id="tab-faces">
+      <div class="two-col wide-left">
+        <div class="card">
+          <div class="card-head">
+            <h2>FACE.GRP 인물 초상화 150종 (50×50 RGBA)</h2>
+            <input type="search" id="faceSearch" placeholder="번호 필터 (예: 0, 12, 149)" />
+          </div>
+          <div class="faces-grid" id="facesGrid"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>초상화 리마스터 비교 (#<span id="faceSelId">000</span>)</h2></div>
+          <div class="face-compare">
+            <div>
+              <p class="hint">원본 1x (50×50)</p>
+              <canvas id="faceOrigCanvas" width="50" height="50" class="checker"></canvas>
+            </div>
+            <div>
+              <p class="hint">4x 도트 (Nearest)</p>
+              <canvas id="faceNearCanvas" width="200" height="200" class="checker"></canvas>
+            </div>
+            <div>
+              <p class="hint">4x 소프트 + 윤곽 보정</p>
+              <canvas id="faceSmoothCanvas" width="200" height="200" class="checker"></canvas>
+            </div>
+          </div>
+          <div class="meta-box" style="margin-top:14px">
+            <strong>복제 방지 암호표 (PASS01 / PASS02)</strong>
+            <p class="hint">Phase 2에서는 1993년 정품 암호 질의 화면을 건너뛰거나 자동 통과/도감 열람 모드로 제공합니다.</p>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <img src="/assets/extracted/ui/pass01.png" alt="PASS01" style="width:48%;border-radius:4px;border:1px solid var(--border)" />
+              <img src="/assets/extracted/ui/pass02.png" alt="PASS02" style="width:48%;border-radius:4px;border:1px solid var(--border)" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: World Maps & Sprites -->
+    <section class="panel" id="tab-world">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+          <h2>챕터별 월드맵 &amp; 스프라이트 (EVENT.0 ~ EVENT.14)</h2>
+          <div class="controls-inline">
+            <label>챕터 선택:
+              <select id="chapterSelect"></select>
+            </label>
+            <span id="chapterStats" class="hint"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head"><h2>MAP.<span id="mapChLabel">0</span> (128×128 그리드)</h2></div>
+          <div class="canvas-stage">
+            <canvas id="mapCanvas" width="384" height="384"></canvas>
+          </div>
+          <div class="meta-box" id="worldMetaBox"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>스프라이트 애니메이터 &amp; 시트</h2>
+            <div class="controls-inline">
+              <button id="sprPlayBtn" class="btn primary">▶ 애니 재생</button>
+              <button id="sprPrevBtn" class="btn">◀</button>
+              <button id="sprNextBtn" class="btn">▶</button>
+              <span id="sprIdxLabel" class="mono">0 / 0</span>
+            </div>
+          </div>
+          <div class="sprite-inspector">
+            <canvas id="spriteZoomCanvas" width="192" height="192" class="checker"></canvas>
+            <div id="spriteDetailMeta" class="meta-box" style="flex:1"></div>
+          </div>
+          <p class="hint" style="margin:10px 0 6px">시트의 스프라이트를 클릭해 프레임 선택:</p>
+          <div class="sheet-scroll">
+            <canvas id="sheetCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: Audio Studio -->
+    <section class="panel" id="tab-audio">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+          <h2>실시간 오디오 파형 &amp; 음질 테스트베드</h2>
+          <div class="controls-inline">
+            <label>VOC 재생 속도(샘플레이트 보정):
+              <select id="vocRateSelect">
+                <option value="1.0" selected>8,000 Hz (1.0x)</option>
+                <option value="1.378">11,025 Hz (1.38x)</option>
+                <option value="0.75">6,000 Hz (0.75x)</option>
+              </select>
+            </label>
+            <span id="audioNowPlaying" class="mono">재생 중인 트랙 없음</span>
+          </div>
+        </div>
+        <canvas id="waveCanvas" width="960" height="110" style="width:100%;height:110px;background:#07090e;border-radius:6px;border:1px solid var(--border)"></canvas>
+        <audio id="mainAudioPlayer" controls style="width:100%;margin-top:8px"></audio>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head"><h2>AdLib OPL2 배경음악 &amp; 효과음 (19트랙 · WAV / MIDI)</h2></div>
+          <div class="list-scroll" id="adlibList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>PCM 음성/효과음 (103클립 · WAV)</h2>
+            <select id="vocBankFilter">
+              <option value="ALL">전체 뱅크 (103)</option>
+              <option value="VOC0">VOC0 (인게임 · 14)</option>
+              <option value="E1V">E1V (오프닝 1 · 12)</option>
+              <option value="E2V">E2V (오프닝 2 · 25)</option>
+              <option value="E3V">E3V (오프닝 3 · 30)</option>
+              <option value="D9V">D9V (D9 이벤트 · 22)</option>
+            </select>
+          </div>
+          <div class="list-scroll" id="vocList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: Dialogues & KFONT -->
+    <section class="panel" id="tab-dialogues">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head">
+            <h2>한국어 스크립트 / 대사 탐색 (EVENT.0~14)</h2>
+            <div class="controls-inline">
+              <select id="dlgChapterSelect"></select>
+              <input type="search" id="dlgSearch" placeholder="한글 대사/인물/무공 검색..." />
+            </div>
+          </div>
+          <div class="list-scroll" id="dlgList" style="max-height:520px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>1993 KFONT.15 한글 16×16 비트맵 렌더러</h2>
+            <select id="fontRenderMode">
+              <option value="dos">도스 16×16 도트 원본 (2x)</option>
+              <option value="remaster">리마스터 그림자 + 고대비 (2x)</option>
+            </select>
+          </div>
+          <textarea id="kfontInput" rows="3" placeholder="여기에 한글/영문 문장을 입력하거나 왼쪽 대사를 클릭하세요...">소오강호 리마스터 테스트: 영호충과 동방불패!</textarea>
+          <div class="canvas-stage dark-stage" style="margin-top:10px">
+            <canvas id="kfontCanvas" width="600" height="200"></canvas>
+          </div>
+          <p class="hint" style="margin-top:10px">원본 `KFONT.15` 2,350자 완성형 한글 + `FONT.E16` 8×16 영문 폰트 글리프맵에서 직접 픽셀을 합성합니다.</p>
+          <div style="margin-top:12px">
+            <p class="hint">KFONT.15 추출 시트 전체 미리보기:</p>
+            <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:4px;background:#07090e">
+              <img src="/assets/extracted/fonts/kfont_15_hangul.png" alt="KFONT.15 Hangul sheet" style="max-width:100%" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
