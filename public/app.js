@@ -183,10 +183,34 @@ class SwordsManExplorer {
         return !btn || btn.dataset.mode === 'remastered';
     }
     async init() {
-        var _a;
-        this.setupTabs();
+        var _a, _b;
+        const isMobilePlay = document.body.dataset.mode === 'mobile-play';
+        if (!isMobilePlay) {
+            this.setupTabs();
+        }
         const statusPill = document.getElementById('statusPill');
         try {
+            if (isMobilePlay) {
+                const [cat, spr, sprHd, fnt, world] = await Promise.all([
+                    fetchJson('catalog.json'),
+                    fetchJson('events/sprites_index.json'),
+                    fetchJson('events/sprites_index_hd.json', REMASTER_BASE).catch(() => null),
+                    fetchJson('fonts/font_bitmaps.json'),
+                    fetchJson('world/chapters_data.json').catch(() => null),
+                ]);
+                this.catalog = cat;
+                this.spritesIndex = spr;
+                this.spritesIndexHd = sprHd;
+                this.fontBitmaps = fnt;
+                this.worldData = world;
+                const chCount = world ? world.active_chapters.length : 0;
+                const artCount = ((_a = world === null || world === void 0 ? void 0 : world.martial_arts) === null || _a === void 0 ? void 0 : _a.length) || 5;
+                statusPill.textContent = `실전 플레이 모바일 (${chCount}챕터 · ${artCount}대무공)`;
+                this.setupGameEngine();
+                this.setupGlobalModeToggle();
+                this.setupMobilePwa();
+                return;
+            }
             const [cat, pal, spr, sprHd, dlg, fnt, world] = await Promise.all([
                 fetchJson('catalog.json'),
                 fetchJson('ui/palette.json'),
@@ -204,7 +228,7 @@ class SwordsManExplorer {
             this.fontBitmaps = fnt;
             this.worldData = world;
             const chCount = world ? world.active_chapters.length : 0;
-            const artCount = ((_a = world === null || world === void 0 ? void 0 : world.martial_arts) === null || _a === void 0 ? void 0 : _a.length) || 5;
+            const artCount = ((_b = world === null || world === void 0 ? void 0 : world.martial_arts) === null || _b === void 0 ? void 0 : _b.length) || 5;
             const endCount = (world === null || world === void 0 ? void 0 : world.endings) ? Object.keys(world.endings).length : 4;
             statusPill.textContent =
                 `Phase 4 완결판(${chCount}챕터·${artCount}대무공·${endCount}엔딩) · 인물 ${cat.faces.count} (4x EPX) · 스프라이트 ${cat.events.total_sprites} (2x EPX)`;
@@ -220,6 +244,102 @@ class SwordsManExplorer {
         catch (err) {
             statusPill.textContent = '로딩 오류: ' + String(err);
             console.error(err);
+        }
+    }
+    setupMobilePwa() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch((err) => {
+                console.warn('SW registration skipped:', err);
+            });
+        }
+        const installBtn = document.getElementById('pwaInstallBtn');
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (installBtn) {
+                installBtn.classList.remove('hidden');
+            }
+        });
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (!deferredPrompt)
+                    return;
+                await deferredPrompt.prompt();
+                await deferredPrompt.userChoice;
+                deferredPrompt = null;
+                installBtn.classList.add('hidden');
+            });
+        }
+        const offlineBtn = document.getElementById('pwaOfflineBtn');
+        if (offlineBtn && 'caches' in window) {
+            offlineBtn.addEventListener('click', async () => {
+                if (offlineBtn.disabled)
+                    return;
+                offlineBtn.disabled = true;
+                const urls = new Set();
+                const isHd = this.isGlobalHdMode();
+                const base = isHd ? REMASTER_BASE : ASSET_BASE;
+                if (this.worldData) {
+                    for (const chId of this.worldData.active_chapters) {
+                        urls.add(`${ASSET_BASE}/world/ch${chId}_map.bin`);
+                        if (isHd)
+                            urls.add(`${REMASTER_BASE}/events/ch${chId}_sheet_hd.png`);
+                        urls.add(`${ASSET_BASE}/events/ch${chId}_sheet.png`);
+                    }
+                }
+                if (this.catalog) {
+                    urls.add(`${base}/${this.catalog.faces.sheet}`);
+                    for (let i = 0; i < this.catalog.faces.count; i += 1) {
+                        urls.add(`${base}/faces/face_${String(i).padStart(3, '0')}.png`);
+                    }
+                    for (const csKey of Object.keys(this.catalog.cutscenes)) {
+                        const cs = this.catalog.cutscenes[csKey];
+                        for (const fr of cs.frames) {
+                            urls.add(`${base}/${fr}`);
+                        }
+                    }
+                    for (const v of this.catalog.audio.voc) {
+                        urls.add(`${base}/${v.file}`);
+                    }
+                    for (const b of this.catalog.audio.adlib) {
+                        urls.add(`${base}/${b.wav}`);
+                    }
+                }
+                const list = Array.from(urls);
+                let done = 0;
+                try {
+                    const cache = await caches.open('swordsman-play-v1');
+                    const batchSize = 8;
+                    for (let i = 0; i < list.length; i += batchSize) {
+                        const slice = list.slice(i, i + batchSize);
+                        await Promise.all(slice.map(async (u) => {
+                            try {
+                                const hit = await cache.match(u);
+                                if (!hit) {
+                                    const res = await fetch(u);
+                                    if (res.ok)
+                                        await cache.put(u, res);
+                                }
+                            }
+                            catch {
+                                // skip unavailable optional asset
+                            }
+                            finally {
+                                done += 1;
+                            }
+                        }));
+                        offlineBtn.textContent = `📥 오프라인 ${done}/${list.length}`;
+                    }
+                    offlineBtn.textContent = `✅ 오프라인 준비됨 (${done})`;
+                }
+                catch {
+                    offlineBtn.textContent = '⚠ 오프라인 캐시 실패';
+                }
+                finally {
+                    offlineBtn.disabled = false;
+                }
+            });
         }
     }
     setupGlobalModeToggle() {
@@ -2128,6 +2248,7 @@ class SwordsManExplorer {
             ctx.fillText(curChapter.title, 18, 27);
         };
         const keysDown = new Set();
+        let heldMoveVec = null;
         const moveStep = (dx, dy, dt) => {
             const speed = 6.2;
             const nx = player.x + dx * speed * dt;
@@ -2288,6 +2409,10 @@ class SwordsManExplorer {
                         kx += 1;
                         ky -= 1;
                     }
+                    if (heldMoveVec) {
+                        kx += heldMoveVec.dx;
+                        ky += heldMoveVec.dy;
+                    }
                     if (kx !== 0 || ky !== 0) {
                         player.moveTarget = null;
                         const len = Math.hypot(kx, ky);
@@ -2423,12 +2548,29 @@ class SwordsManExplorer {
             player.moveTarget = { x: gx, y: gy, pendingObj: hitObj };
         });
         Array.from(document.querySelectorAll('.game-move-btn')).forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const el = btn;
-                const dx = Number(el.dataset.dx || 0);
-                const dy = Number(el.dataset.dy || 0);
-                const len = Math.hypot(dx, dy) || 1;
-                moveStep(dx / len, dy / len, 0.16);
+            const el = btn;
+            const dx = Number(el.dataset.dx || 0);
+            const dy = Number(el.dataset.dy || 0);
+            const len = Math.hypot(dx, dy) || 1;
+            const nx = dx / len;
+            const ny = dy / len;
+            const startHold = (e) => {
+                e.preventDefault();
+                heldMoveVec = { dx: nx, dy: ny };
+                el.classList.add('holding');
+            };
+            const stopHold = () => {
+                if (heldMoveVec && heldMoveVec.dx === nx && heldMoveVec.dy === ny) {
+                    heldMoveVec = null;
+                }
+                el.classList.remove('holding');
+            };
+            el.addEventListener('pointerdown', startHold);
+            el.addEventListener('pointerup', stopHold);
+            el.addEventListener('pointercancel', stopHold);
+            el.addEventListener('pointerleave', stopHold);
+            el.addEventListener('click', () => {
+                moveStep(nx, ny, 0.16);
                 player.animTick += 1;
                 updateObjsUi();
             });
