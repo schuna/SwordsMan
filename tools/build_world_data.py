@@ -96,6 +96,9 @@ PHASE_KOREAN_NAMES: dict[str, str] = {
     "tianBou": "전백광",
     "TuBiWon": "단청생 / 황종공",
     "UeBuChun": "동방불패",
+    "LinPinZi": "임평지",
+    "HeiBaiZi": "흑백자",
+    "ZuoLernCh": "좌냉선",
     "FeiDaw": "비도 무사",
     "Fei Hamer": "철퇴 무사",
     "HoDoKen": "권법 고수",
@@ -314,9 +317,12 @@ def decode_comd_bytecode(
             p += 8
             continue
 
+        if op == 0x81FF and any(st["op"] == "teleport" for st in steps):
+            break
+
         if op == 0x8062 and p + 6 <= len(bc):
             slot, item_id = struct.unpack_from("<HH", bc, p + 2)
-            if item_id != 0xFFFF and item_id != 0:
+            if 0 < item_id < 20:
                 steps.append(
                     {
                         "op": "give_item",
@@ -503,6 +509,7 @@ def build_chapter(ch: int, sprite_info: dict[str, Any]) -> dict[str, Any]:
     }
 
     chars: list[dict[str, Any]] = []
+    companion_objs: list[dict[str, Any]] = []
     for s in range(1, 32):
         w = struct.unpack_from("<32H", stk_raw, s * 64)
         if w[2] != w[1] + 1 and (w[1] > 0 or w[2] > 0) and 1 <= w[14] <= 20000:
@@ -512,12 +519,47 @@ def build_chapter(ch: int, sprite_info: dict[str, Any]) -> dict[str, Any]:
             hp_cur = int(w[13]) if w[13] > 0 else int(w[14])
             hp_max = max(hp_cur, int(w[14]))
             pname = phases[phase_idx]["label"] if phase_idx < len(phases) else f"NPC #{s}"
+            cx = round(w[1] / 256.0, 2)
+            cy = round(w[2] / 256.0, 2)
+
+            if s == 1 and (w[4] & 0x2000) != 0:
+                raw_npc_comd = int(w[6] & 0xFF)
+                npc_comd = raw_npc_comd if raw_npc_comd < len(comds) else 0
+                if ch == 4 and npc_comd == 16 and len(comds) > 15:
+                    npc_comd = 15
+                npc_spr: int | None = None
+                if phase_idx < len(phases):
+                    for fid in phases[phase_idx]["frames"]:
+                        sp = valid_ids.get(fid)
+                        if sp and sp.get("orig_x", 0) < 48 and sp.get("w", 999) < 120:
+                            npc_spr = fid
+                            break
+                cname = comds[npc_comd]["name"] if npc_comd < len(comds) else "NPC"
+                companion_objs.append(
+                    {
+                        "slot": 100 + s,
+                        "x": cx,
+                        "y": cy,
+                        "raw_spr": 0,
+                        "spr_id": npc_spr,
+                        "flags": int(w[4]),
+                        "mode": int(w[5]),
+                        "comd_id": npc_comd,
+                        "phase_hint": phase_idx,
+                        "item_id": 0,
+                        "item_qty": 0,
+                        "kind": "npc",
+                        "label": f"{pname} ({cname} · 동행)",
+                    }
+                )
+                continue
+
             is_boss = s == 1
             chars.append(
                 {
                     "slot": s,
-                    "x": round(w[1] / 256.0, 2),
-                    "y": round(w[2] / 256.0, 2),
+                    "x": cx,
+                    "y": cy,
                     "hp": hp_cur,
                     "max_hp": hp_max,
                     "mp": int(w[16]),
@@ -604,6 +646,28 @@ def build_chapter(ch: int, sprite_info: dict[str, Any]) -> dict[str, Any]:
                     "label": label,
                 }
             )
+
+    objs.extend(companion_objs)
+
+    # CH4 south-west exit trigger (COMD #16 'Target' checks LinPinZi <= 11.5, >= 119.5)
+    if ch == 4 and len(comds) > 16 and any(st["op"] == "teleport" for st in comds[16]["steps"]):
+        objs.append(
+            {
+                "slot": 99,
+                "x": 11.0,
+                "y": 120.0,
+                "raw_spr": 16384,
+                "spr_id": None,
+                "flags": 0,
+                "mode": 0,
+                "comd_id": 16,
+                "phase_hint": 0,
+                "item_id": 0,
+                "item_qty": 0,
+                "kind": "portal",
+                "label": "임평지 · 약왕묘 입구 (Target)",
+            }
+        )
 
     return {
         "chapter": ch,
