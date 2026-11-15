@@ -307,3 +307,89 @@ canvas { max-width: 100%; }
   background: linear-gradient(90deg, #2d6ca8, #4ba3e3);
   transition: width 0.2s ease;
 }
+
+/* Phase 4 HUD Extensions: Save Bar, Martial Arts Quickslots & Minimap */
+.save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 4px;
+  border-top: 1px dashed var(--border);
+}
+.skill-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+@media (max-width: 720px) {
+  .skill-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.skill-slot-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 9px;
+  background: #0c1018;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.skill-slot-btn:hover {
+  border-color: var(--jade);
+  transform: translateY(-1px);
+}
+.skill-slot-btn.active {
+  border-color: var(--gold);
+  background: rgba(212, 168, 83, 0.14);
+  box-shadow: 0 0 0 1px rgba(212, 168, 83, 0.35);
+}
+.skill-slot-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.skill-slot-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: Consolas, monospace;
+}
+.minimap-wrap {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+#gameMinimapCanvas {
+  flex: 0 0 160px;
+  width: 160px;
+  height: 160px;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  background: #06080d;
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+.minimap-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+.legend-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}

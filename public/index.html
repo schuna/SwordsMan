@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>소오강호 (SwordsMan 1993) — Phase 3 실전 플레이 &amp; 리마스터 스튜디오</title>
-  <link rel="stylesheet" href="/styles.css?v=3" />
+  <title>소오강호 (SwordsMan 1993) — Remaster v1.0 (Phase 4 완결판)</title>
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -12,7 +12,7 @@
       <div class="seal">笑傲</div>
       <div>
         <h1>소오강호 (동방불패 · SwordsMan 1993) Remaster Engine &amp; Studio</h1>
-        <p class="subtitle">Phase 3 · 아이소메트릭 코어 엔진·전투·COMD 이벤트 구동 &amp; Phase 2 HD A/B 비교 스튜디오 (Port 5188)</p>
+        <p class="subtitle">Phase 4 · 아이소메트릭 코어 엔진·5대 무공·적 AI·미니맵·SV0~2 세이브·멀티엔딩 &amp; HD 비교 스튜디오 (Port 5188)</p>
       </div>
     </div>
     <div class="controls-inline">
@@ -22,7 +22,7 @@
   </header>
 
   <nav class="tabs" id="tabNav">
-    <button class="tab active" data-tab="play">0. 🎮 실전 플레이 (Phase 3 엔진)</button>
+    <button class="tab active" data-tab="play">0. 🎮 실전 플레이 (Phase 4 엔진)</button>
     <button class="tab" data-tab="overview">1. 개요 · 팔레트/UI</button>
     <button class="tab" data-tab="cutscenes">2. 컷신 시어터</button>
     <button class="tab" data-tab="faces">3. 인물 초상화 (150)</button>
@@ -32,25 +32,51 @@
   </nav>
 
   <main class="container">
-    <!-- TAB 0: Playable Core Engine (Phase 3) -->
+    <!-- TAB 0: Playable Core Engine (Phase 4) -->
     <section class="panel active" id="tab-play">
       <div class="card" style="margin-bottom:14px;">
         <div class="card-head" style="margin-bottom:8px;padding-bottom:8px;">
-          <h2>실전 플레이 — 아이소메트릭 월드 · 전투 · 이벤트 인터프리터</h2>
+          <h2>실전 플레이 — 아이소메트릭 월드 · 무공 전투 · 세이브 · 멀티엔딩</h2>
           <div class="controls-inline">
             <button id="gameIntroBtn" class="btn">🎬 오프닝 재생 (GT→TIT)</button>
             <select id="gameChapterSelect"></select>
             <select id="gameEventSelect"></select>
             <button id="gameRunEventBtn" class="btn primary">▶ 이벤트 실행</button>
             <button id="gameInteractBtn" class="btn">💬 대화/상자 (E)</button>
-            <button id="gameAttackBtn" class="btn">⚔️ 공격 (Space)</button>
+            <button id="gameAttackBtn" class="btn">⚔️ 공격/시전 (Space)</button>
             <button id="gameBgmToggle" class="btn" data-bgm="off">🎵 BGM: OFF</button>
+            <label class="hint" style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="gameAiToggle" checked /> 적 AI 교전
+            </label>
             <label class="hint" style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;">
               <input type="checkbox" id="gameNoClipToggle" /> 경공 (충돌무시)
             </label>
           </div>
         </div>
-        <p class="hint" id="gameHintBar" style="margin:0;">조작: WASD / 방향키 또는 캔버스 클릭 이동 · E 또는 상호작용 버튼: 대화/보물상자/포탈 · Space 또는 공격 버튼: 무공 시전 · 상단 버튼으로 HD 2× EPX ↔ 1993 DOS 1× 실시간 전환</p>
+        <div class="save-bar">
+          <div class="controls-inline">
+            <span class="badge gold">세이브/로드</span>
+            <select id="gameSaveSlotSelect">
+              <option value="SV0">슬롯 1 (SV0)</option>
+              <option value="SV1">슬롯 2 (SV1)</option>
+              <option value="SV2">슬롯 3 (SV2)</option>
+              <option value="QUICK">퀵세이브 (F5/F9)</option>
+            </select>
+            <button id="gameSaveBtn" class="btn">💾 저장 (F5)</button>
+            <button id="gameLoadBtn" class="btn">📂 불러오기 (F9)</button>
+          </div>
+          <div class="controls-inline">
+            <span class="badge gold">멀티 엔딩</span>
+            <select id="gameEndingSelect">
+              <option value="d9">진 엔딩 (D9) · 흑목애 결전</option>
+              <option value="em1">엔딩 1 (EM1) · 화산의 검객</option>
+              <option value="em2">엔딩 2 (EM2) · 소오강호 합주</option>
+              <option value="em3">엔딩 3 (EM3) · 독고구검 전승</option>
+            </select>
+            <button id="gameEndingBtn" class="btn">🏆 엔딩 시퀀스</button>
+          </div>
+        </div>
+        <p class="hint" id="gameHintBar" style="margin:6px 0 0;">조작: WASD / 방향키 / 캔버스·미니맵 클릭 이동 · 1~5: 무공 퀵슬롯 선택 · Space: 시전 · E: 대화/상자 · F5/F9: 저장/불러오기 · 상단 버튼으로 HD ↔ DOS 1× 실시간 전환</p>
       </div>
 
       <div class="play-layout">
@@ -58,8 +84,9 @@
           <div class="card play-canvas-card">
             <div class="play-canvas-frame">
               <canvas id="gameCanvas" width="768" height="480" tabindex="0"></canvas>
-              <button id="gameSkipIntroBtn" class="btn primary intro-skip-btn" hidden>⏭ 오프닝 건너뛰기</button>
+              <button id="gameSkipIntroBtn" class="btn primary intro-skip-btn" hidden>⏭ 컷신 건너뛰기</button>
             </div>
+            <div class="skill-bar" id="gameSkillBar"></div>
             <div class="play-footer-bar">
               <span class="badge gold" id="gameCoordBadge">CH0 · (72.3, 72.3)</span>
               <span class="badge" id="gameRenderBadge">✨ 2× EPX HD</span>
@@ -92,9 +119,26 @@
         </div>
 
         <div class="play-sidebar">
+          <div class="card" id="gameMinimapCard">
+            <div class="card-head">
+              <h2>실시간 미니맵</h2>
+              <span class="badge" id="gameMinimapCoords">128×128</span>
+            </div>
+            <div class="minimap-wrap">
+              <canvas id="gameMinimapCanvas" width="160" height="160"></canvas>
+              <div class="minimap-legend">
+                <div><span class="legend-dot" style="background:#fff4b8;"></span> 영호충</div>
+                <div><span class="legend-dot" style="background:#f25252;"></span> 적 / 보스</div>
+                <div><span class="legend-dot" style="background:#d4a853;"></span> 보물상자</div>
+                <div><span class="legend-dot" style="background:#3da88e;"></span> 포탈 / NPC</div>
+                <p class="hint" style="margin:6px 0 0;font-size:0.74rem;">클릭: 길찾기 이동<br/>Shift+클릭: 즉시 이동</p>
+              </div>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-head">
-              <h2>영호충 상태 &amp; 소지품</h2>
+              <h2>영호충 상태 &amp; 소지품 (클릭 사용)</h2>
               <span class="badge" id="gameSwordBadge">화산검법</span>
             </div>
             <div class="meta-box" id="gameStatusBox">초기화 중...</div>

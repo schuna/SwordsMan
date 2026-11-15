@@ -73,6 +73,8 @@
   * [x] TypeScript 기반 오프닝(`GT`→`TIT` + `tit_theme.wav`) 시퀀서, 45도 쿼터뷰 아이소메트릭 렌더러(`768×480` 2× 확장/깊이 정렬), `TER.blocking` 충돌 판정 및 이동, 보물상자·기초 전투·`defeat_comd` 트리거, `COMD` 바이트코드 인터프리터(`0x8025`/`0x8020`/`0x8028`/`0x8036`/`0x8062`), `KFONT.15` 초상화 대화창, 글로벌 HD↔DOS 실시간 모드 전환 구현 (`src/main.ts` → `public/app.js`, `public/index.html`, `public/styles.css`)
   * [x] 포트 `5188` 실전 플레이 탭(`#tab-play`) 라이브 브라우저 검증 완료 (오프닝/스킵, 대화 진행, 보물상자 획득, 보스 전투, 챕터 전환 `CH0`/`CH2`/`CH14`, HD↔DOS 실시간 전환, HTTP >= 400 오류 0건)
   * [x] Phase 3 완료 GitHub 동기화 (`schuna/SwordsMan`)
-* **Phase 4: 전투·무공·UI 완성, 멀티 엔딩 및 폴리싱**
-  * AI/전투/장풍·이펙트, 인벤토리·무공 퀵슬롯 HUD, 미니맵, 확장 세이브(`SV0~SV2` 호환 + 퀵세이브), 실시간 오리지널↔리마스터 토글 완성
-  * 멀티 엔딩(`EM1~3`, `D9`) 통합 및 최종 패키징, GitHub 동기화
+* **Phase 4: 전투·무공·UI 완성, 멀티 엔딩 및 폴리싱** *(완료)*
+  * [x] `tools/build_world_data.py` 확장 및 `chapters_data.json`(`656.2 KB`) 재생성 (`EVENT` `MAGIC`/`BULLET` 섹션 메타데이터, 5대 무공 `화산검법`/`독고구검`/`벽사검법`/`흡성대법`/`자하진기`, 멀티 엔딩 4종 `EM1~3`/`D9` 시퀀스 내장)
+  * [x] 전투·무공·UI/HUD 완결 (`src/main.ts` → `public/app.js`, `public/index.html`, `public/styles.css`): 무공 퀵슬롯(`1`~`5`) 및 장풍 투사체(`Projectile`)·흡성 광역·자하진기 운기조식·플로팅 데미지 팝업, 적 AI 추적·교전·위기 호신진기(`#gameAiToggle`), `128×128` 실시간 미니맵 이동/순간이동(`#gameMinimapCanvas`), 소지품 클릭 사용, `SV0~SV2` + `QUICK`(`F5`/`F9`) `localStorage` 세이브/로드, 멀티 엔딩(`EM1~3`, `D9`) 시퀀서 및 `CH14` 동방불패 격파 진엔딩 연동
+  * [x] 포트 `5188` 최종 라이브 브라우저 검증 완료 (미니맵 길찾기, `독고구검` 투사체 & `흡성대법` 광역 흡수, `금창약` 사용, `SV0` 저장/챕터전환/복원, `D9` 엔딩 재생/스킵, 글로벌 `HD ↔ DOS 1×` 전환, `HTTP >= 400` 오류 0건)
+  * [x] Phase 4 완료 및 프로젝트 최종 GitHub 동기화 (`schuna/SwordsMan`)

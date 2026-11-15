@@ -183,6 +183,7 @@ class SwordsManExplorer {
         return !btn || btn.dataset.mode === 'remastered';
     }
     async init() {
+        var _a;
         this.setupTabs();
         const statusPill = document.getElementById('statusPill');
         try {
@@ -203,8 +204,10 @@ class SwordsManExplorer {
             this.fontBitmaps = fnt;
             this.worldData = world;
             const chCount = world ? world.active_chapters.length : 0;
+            const artCount = ((_a = world === null || world === void 0 ? void 0 : world.martial_arts) === null || _a === void 0 ? void 0 : _a.length) || 5;
+            const endCount = (world === null || world === void 0 ? void 0 : world.endings) ? Object.keys(world.endings).length : 4;
             statusPill.textContent =
-                `Phase 3 엔진(${chCount}챕터) · 인물 ${cat.faces.count} (4x EPX) · 스프라이트 ${cat.events.total_sprites} (2x EPX) · 대사 ${cat.events.total_dialogues}`;
+                `Phase 4 완결판(${chCount}챕터·${artCount}대무공·${endCount}엔딩) · 인물 ${cat.faces.count} (4x EPX) · 스프라이트 ${cat.events.total_sprites} (2x EPX)`;
             this.setupGameEngine();
             this.renderOverview();
             this.setupCutscenes();
@@ -890,7 +893,17 @@ class SwordsManExplorer {
         const introBtn = document.getElementById('gameIntroBtn');
         const skipIntroBtn = document.getElementById('gameSkipIntroBtn');
         const bgmBtn = document.getElementById('gameBgmToggle');
+        const aiChk = document.getElementById('gameAiToggle');
         const noClipChk = document.getElementById('gameNoClipToggle');
+        const saveSlotSel = document.getElementById('gameSaveSlotSelect');
+        const saveBtn = document.getElementById('gameSaveBtn');
+        const loadBtn = document.getElementById('gameLoadBtn');
+        const endingSel = document.getElementById('gameEndingSelect');
+        const endingBtn = document.getElementById('gameEndingBtn');
+        const skillBar = document.getElementById('gameSkillBar');
+        const minimapCanvas = document.getElementById('gameMinimapCanvas');
+        const minimapCoords = document.getElementById('gameMinimapCoords');
+        const minimapCtx = minimapCanvas.getContext('2d');
         const coordBadge = document.getElementById('gameCoordBadge');
         const renderBadge = document.getElementById('gameRenderBadge');
         const swordBadge = document.getElementById('gameSwordBadge');
@@ -927,7 +940,20 @@ class SwordsManExplorer {
         chSel.innerHTML = activeChapters
             .map((c) => `<option value="${c.chapter}">${c.title}</option>`)
             .join('');
+        const defaultArts = [
+            { id: 'huashan', key: '1', name: '화산검법', mp_cost: 0, damage: 55, range: 3.2, proj: false, aoe: false, heal_hp: 0, heal_mp: 0, color: '#ffe082', desc: '근접 검술' },
+            { id: 'dugu', key: '2', name: '독고구검', mp_cost: 15, damage: 95, range: 7.5, proj: true, aoe: false, heal_hp: 0, heal_mp: 0, color: '#4dd0e1', desc: '관통 검기' },
+            { id: 'bixie', key: '3', name: '벽사검법', mp_cost: 22, damage: 135, range: 6.5, proj: true, aoe: false, heal_hp: 0, heal_mp: 0, color: '#ff6e80', desc: '고속 검강' },
+            { id: 'xixing', key: '4', name: '흡성대법', mp_cost: 30, damage: 110, range: 5.0, proj: false, aoe: true, heal_hp: 0, heal_mp: 0, color: '#b388ff', desc: '광역 흡수' },
+            { id: 'zixia', key: '5', name: '자하진기', mp_cost: 25, damage: 0, range: 0, proj: false, aoe: false, heal_hp: 90, heal_mp: 0, color: '#69f0ae', desc: '체력 회복' },
+        ];
+        const martialArts = world.martial_arts && world.martial_arts.length > 0 ? world.martial_arts : defaultArts;
+        let activeSkillIdx = 0;
         const chapterStates = new Map();
+        const minimapBgCache = new Map();
+        const projectiles = [];
+        const floatingTexts = [];
+        const pulseRings = [];
         const inventory = new Map([
             [0, { id: 0, name: '은전', qty: 100 }],
             [5, { id: 5, name: '금창약', qty: 2 }],
@@ -959,6 +985,28 @@ class SwordsManExplorer {
         let introCancel = false;
         let introImg = null;
         let introCaption = '';
+        const spawnFloating = (x, y, text, color) => {
+            floatingTexts.push({ x, y, text, color, life: 0.95, maxLife: 0.95 });
+        };
+        const spawnPulse = (x, y, maxR, color) => {
+            pulseRings.push({ x, y, maxR, color, life: 0.45, maxLife: 0.45 });
+        };
+        const renderSkillBar = () => {
+            const skCur = martialArts[activeSkillIdx] || martialArts[0];
+            if (skCur) {
+                player.swordName = skCur.name;
+                swordBadge.textContent = skCur.name;
+            }
+            skillBar.innerHTML = martialArts
+                .map((sk, idx) => `<button type="button" class="skill-slot-btn${idx === activeSkillIdx ? ' active' : ''}" data-skill-idx="${idx}" title="${sk.desc}">
+              <div class="skill-slot-top">
+                <span style="color:${sk.color};">[${sk.key}] ${sk.name}</span>
+                <span class="badge">MP ${sk.mp_cost}</span>
+              </div>
+              <div class="skill-slot-meta">${sk.heal_hp > 0 ? `체력 +${sk.heal_hp}` : sk.aoe ? `광역 ${sk.damage}` : sk.proj ? `장풍 ${sk.damage}` : `근접 ${sk.damage}`}</div>
+            </button>`)
+                .join('');
+        };
         const pushLog = (msg) => {
             const chTag = `CH${curChapter.chapter}`;
             logs.unshift(`[${chTag}] ${msg}`);
@@ -1070,7 +1118,12 @@ class SwordsManExplorer {
             let st = chapterStates.get(curChapter.chapter);
             if (!st) {
                 st = {
-                    chars: curChapter.chars.map((c) => ({ ...c, alive: true, hitFlash: 0 })),
+                    chars: curChapter.chars.map((c) => ({
+                        ...c,
+                        alive: true,
+                        hitFlash: 0,
+                        aiCooldown: 0.7 + Math.random() * 0.6,
+                    })),
                     objs: curChapter.objs.map((o) => ({
                         ...o,
                         opened: false,
@@ -1081,10 +1134,91 @@ class SwordsManExplorer {
             }
             return st;
         };
+        const getMinimapBg = (ch, grid) => {
+            const cached = minimapBgCache.get(ch.chapter);
+            if (cached)
+                return cached;
+            const off = document.createElement('canvas');
+            off.width = ch.map_w;
+            off.height = ch.map_h;
+            const octx = off.getContext('2d');
+            const img = octx.createImageData(ch.map_w, ch.map_h);
+            for (let i = 0; i < ch.map_w * ch.map_h; i++) {
+                const tid = grid[i] || 0;
+                const ter = ch.ter[tid];
+                let r = 20;
+                let g = 29;
+                let b = 46;
+                if (ter && ter.damage > 0) {
+                    r = 140;
+                    g = 46;
+                    b = 54;
+                }
+                else if (ter && ter.blocking > 0) {
+                    r = 66;
+                    g = 82;
+                    b = 110;
+                }
+                const p = i * 4;
+                img.data[p] = r;
+                img.data[p + 1] = g;
+                img.data[p + 2] = b;
+                img.data[p + 3] = 255;
+            }
+            octx.putImageData(img, 0, 0);
+            minimapBgCache.set(ch.chapter, off);
+            return off;
+        };
+        const renderMinimap = () => {
+            const mw = minimapCanvas.width;
+            const mh = minimapCanvas.height;
+            const bg = getMinimapBg(curChapter, curGrid);
+            minimapCtx.imageSmoothingEnabled = false;
+            minimapCtx.clearRect(0, 0, mw, mh);
+            minimapCtx.drawImage(bg, 0, 0, mw, mh);
+            const sx = mw / curChapter.map_w;
+            const sy = mh / curChapter.map_h;
+            const st = getCurState();
+            for (const obj of st.objs) {
+                const ox = obj.x * sx;
+                const oy = obj.y * sy;
+                if (obj.kind === 'chest' && !obj.opened) {
+                    minimapCtx.fillStyle = '#d4a853';
+                    minimapCtx.fillRect(ox - 2, oy - 2, 4, 4);
+                }
+                else if (obj.kind === 'portal' || obj.kind === 'npc') {
+                    minimapCtx.fillStyle = '#3da88e';
+                    minimapCtx.fillRect(ox - 1.5, oy - 1.5, 3, 3);
+                }
+            }
+            for (const ch of st.chars) {
+                if (!ch.alive)
+                    continue;
+                minimapCtx.fillStyle = ch.is_boss ? '#ffca28' : '#f25252';
+                minimapCtx.beginPath();
+                minimapCtx.arc(ch.x * sx, ch.y * sy, ch.is_boss ? 3.2 : 2.2, 0, Math.PI * 2);
+                minimapCtx.fill();
+            }
+            if (player.moveTarget) {
+                minimapCtx.strokeStyle = 'rgba(77, 208, 225, 0.85)';
+                minimapCtx.lineWidth = 1;
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(player.x * sx, player.y * sy);
+                minimapCtx.lineTo(player.moveTarget.x * sx, player.moveTarget.y * sy);
+                minimapCtx.stroke();
+            }
+            const px = player.x * sx;
+            const py = player.y * sy;
+            minimapCtx.strokeStyle = '#fff4b8';
+            minimapCtx.lineWidth = 1.5;
+            minimapCtx.strokeRect(px - 3, py - 3, 6, 6);
+            minimapCoords.textContent = `CH${curChapter.chapter} (${Math.round(player.x)},${Math.round(player.y)})`;
+        };
         const updateStatusUi = () => {
             const hpPct = Math.max(0, Math.min(100, Math.round((player.hp / Math.max(1, player.maxHp)) * 100)));
             const mpPct = Math.max(0, Math.min(100, Math.round((player.mp / Math.max(1, player.maxMp)) * 100)));
-            swordBadge.textContent = player.swordName;
+            const activeSk = martialArts[activeSkillIdx] || martialArts[0];
+            swordBadge.textContent = activeSk ? activeSk.name : player.swordName;
             statusBox.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <strong>영호충 (令狐沖)</strong>
@@ -1097,7 +1231,7 @@ class SwordsManExplorer {
       `;
             const itemsArr = Array.from(inventory.values());
             invList.innerHTML = itemsArr
-                .map((it) => `<div class="list-row" style="padding:5px 8px;font-size:0.8rem;">
+                .map((it) => `<div class="list-row clickable inv-row" data-item-id="${it.id}" style="padding:5px 8px;font-size:0.8rem;" title="클릭하여 사용/장착">
               <span>${it.name}</span>
               <span class="badge gold">×${it.qty}</span>
             </div>`)
@@ -1169,6 +1303,38 @@ class SwordsManExplorer {
             const kScale = txt.length > 26 || txt.includes('\n') ? 1 : 2;
             const kMode = this.isGlobalHdMode() ? 'phase2' : 'dos';
             renderKfontBitmapCanvas(dlgKfont, txt, kMode, this.fontBitmaps, kScale, '#080b11');
+        };
+        const useInventoryItem = (itemId) => {
+            const entry = inventory.get(itemId);
+            if (!entry || entry.qty <= 0)
+                return;
+            const isMedicine = ['대보환', '금창약', '웅담환', '대환단', '천향단속교'].some((m) => entry.name.includes(m));
+            if (isMedicine) {
+                entry.qty -= 1;
+                if (entry.qty <= 0)
+                    inventory.delete(itemId);
+                player.hp = Math.min(player.maxHp, player.hp + 120);
+                player.mp = Math.min(player.maxMp, player.mp + 80);
+                playVoc('chest');
+                spawnPulse(player.x, player.y, 1.8, '#69f0ae');
+                spawnFloating(player.x, player.y, '+120 HP / +80 MP', '#69f0ae');
+                pushLog(`소지품 사용: ${entry.name} (HP +120, MP +80 회복)`);
+                updateStatusUi();
+                return;
+            }
+            if (entry.name.includes('검법')) {
+                const matchIdx = martialArts.findIndex((sk) => entry.name.includes(sk.name));
+                if (matchIdx >= 0) {
+                    activeSkillIdx = matchIdx;
+                    renderSkillBar();
+                }
+                player.swordName = entry.name;
+                player.swordPower = Math.max(player.swordPower, entry.name === '벽사검법' ? 95 : 75);
+                pushLog(`비급 장착: [${entry.name}] (공격력 ${player.swordPower})`);
+                updateStatusUi();
+                return;
+            }
+            pushLog(`소지품 확인: ${entry.name} (×${entry.qty})`);
         };
         const addInventoryItem = (itemId, qty) => {
             if (itemId < 0 || itemId >= curChapter.items.length)
@@ -1299,57 +1465,94 @@ class SwordsManExplorer {
             }
             interactWithObj(bestObj);
         };
-        const performAttack = () => {
-            player.state = 'attack';
-            player.stateTimer = 0.36;
-            player.animTick = 0;
-            playVoc('sword');
-            const st = getCurState();
-            let target = null;
-            let bestDist = 3.2;
-            for (const ch of st.chars) {
-                if (!ch.alive)
-                    continue;
-                const d = Math.hypot(ch.x - player.x, ch.y - player.y);
-                if (d < bestDist) {
-                    bestDist = d;
-                    target = ch;
+        const stopIntro = () => {
+            var _a;
+            introCancel = true;
+            introPlaying = false;
+            skipIntroBtn.hidden = true;
+            (_a = this.gameIntroAudio) === null || _a === void 0 ? void 0 : _a.pause();
+        };
+        const playCutsceneSequence = async (frames, musicRel, logLabel) => {
+            if (introPlaying) {
+                stopIntro();
+                await new Promise((res) => window.setTimeout(res, 40));
+            }
+            introPlaying = true;
+            introCancel = false;
+            skipIntroBtn.hidden = false;
+            const base = this.isGlobalHdMode() ? REMASTER_BASE : ASSET_BASE;
+            if (!this.gameIntroAudio) {
+                this.gameIntroAudio = new Audio();
+                this.gameIntroAudio.volume = 0.45;
+            }
+            this.gameIntroAudio.src = base + musicRel;
+            this.gameIntroAudio.currentTime = 0;
+            this.gameIntroAudio.play().catch(() => { });
+            pushLog(logLabel);
+            // Stream images in small chunks so even 36-frame endings start playing immediately
+            const batchSize = 6;
+            for (let start = 0; start < frames.length; start += batchSize) {
+                if (introCancel)
+                    break;
+                const chunk = frames.slice(start, start + batchSize);
+                const imgs = await Promise.all(chunk.map((item) => loadImage(item.path, base).catch(() => null)));
+                for (let j = 0; j < chunk.length; j++) {
+                    if (introCancel)
+                        break;
+                    introImg = imgs[j];
+                    introCaption = chunk[j].caption;
+                    await new Promise((res) => window.setTimeout(res, chunk[j].ms));
                 }
             }
-            if (!target) {
-                pushLog(`허공에 [${player.swordName}] 검기를 펼쳤습니다.`);
+            stopIntro();
+        };
+        const startIntro = async () => {
+            if (introPlaying) {
+                stopIntro();
                 return;
             }
-            // Face target
-            const dx = target.x - player.x;
-            const dy = target.y - player.y;
-            if (Math.abs(dx) >= Math.abs(dy)) {
-                player.dir = dx >= 0 ? 1 : 3;
-            }
-            else {
-                player.dir = dy >= 0 ? 2 : 0;
-            }
-            const dmg = player.swordPower + Math.floor(Math.random() * 16);
-            target.hp = Math.max(0, target.hp - dmg);
-            target.hitFlash = 0.25;
-            playVoc('hit');
-            if (target.hp <= 0) {
-                target.alive = false;
-                const bonus = target.is_boss ? 250 : 60;
-                player.exp += bonus;
-                pushLog(`${target.name} 격파! (+${bonus} EXP)`);
-                updateStatusUi();
-                updateObjsUi();
-                if (target.defeat_comd !== null && curChapter.comds[target.defeat_comd]) {
-                    runComd(target.defeat_comd);
+            const seq = [
+                ...world.intro.gt_screens.map((path, i) => ({
+                    path,
+                    ms: 1400,
+                    caption: `SOFT-WORLD 1993 · INTRO ${i + 1}/2`,
+                })),
+                ...world.intro.tit_frames.map((path, i) => ({
+                    path,
+                    ms: 95,
+                    caption: `소오강호 (동방불패 · SwordsMan) TITLE ${i + 1}/${world.intro.tit_frames.length}`,
+                })),
+            ];
+            await playCutsceneSequence(seq, world.intro.tit_music, '오프닝 시퀀스 재생: GT 로고 → TIT 타이틀');
+        };
+        const startEnding = async (endingId) => {
+            var _a, _b, _c, _d;
+            const meta = (_a = world.endings) === null || _a === void 0 ? void 0 : _a[endingId];
+            const catFrames = ((_d = (_c = (_b = this.catalog) === null || _b === void 0 ? void 0 : _b.cutscenes) === null || _c === void 0 ? void 0 : _c[endingId]) === null || _d === void 0 ? void 0 : _d.frames) || [];
+            let rawFrames = (meta === null || meta === void 0 ? void 0 : meta.frames) && meta.frames.length > 0 ? meta.frames : catFrames;
+            if (rawFrames.length > 36) {
+                const sampled = [];
+                for (let i = 0; i < 36; i++) {
+                    const idx = Math.min(rawFrames.length - 1, Math.round((i * (rawFrames.length - 1)) / 35));
+                    if (!sampled.includes(rawFrames[idx]))
+                        sampled.push(rawFrames[idx]);
                 }
+                rawFrames = sampled;
+            }
+            if (rawFrames.length === 0) {
+                pushLog(`엔딩 [${endingId}] 프레임을 찾을 수 없습니다.`);
                 return;
             }
-            const counterDmg = Math.max(5, Math.min(25, Math.floor(target.attack * 0.4)));
-            player.hp = Math.max(10, player.hp - counterDmg);
-            pushLog(`${target.name}에게 ${dmg} 피해! (남은 HP ${target.hp}/${target.max_hp}, 반격 -${counterDmg})`);
-            updateStatusUi();
-            updateObjsUi();
+            const title = (meta === null || meta === void 0 ? void 0 : meta.title) || `엔딩 (${endingId.toUpperCase()})`;
+            const caption = (meta === null || meta === void 0 ? void 0 : meta.caption) || '';
+            const music = (meta === null || meta === void 0 ? void 0 : meta.music) || (endingId === 'd9' ? 'audio/adlib/d9_theme.wav' : 'audio/adlib/em1_theme.wav');
+            endingSel.value = endingId;
+            const seq = rawFrames.map((path, i) => ({
+                path,
+                ms: 170,
+                caption: `${title} (${i + 1}/${rawFrames.length}) — ${caption}`,
+            }));
+            await playCutsceneSequence(seq, music, `멀티 엔딩 재생: ${title}`);
         };
         const loadChapter = (chNum, spawnOverride) => {
             const target = world.chapters.find((c) => c.chapter === chNum && c.active);
@@ -1362,6 +1565,8 @@ class SwordsManExplorer {
             player.x = spawnOverride ? spawnOverride.x : curChapter.spawn.x;
             player.y = spawnOverride ? spawnOverride.y : curChapter.spawn.y;
             player.moveTarget = null;
+            projectiles.length = 0;
+            pulseRings.length = 0;
             camera.x = player.x;
             camera.y = player.y;
             activeComd = null;
@@ -1372,61 +1577,268 @@ class SwordsManExplorer {
                 .map((c) => `<option value="${c.id}">#${c.id} ${c.name}${c.steps.some((s) => s.op === 'say') ? ` (대사 ${c.steps.filter((s) => s.op === 'say').length})` : ''}</option>`)
                 .join('');
             coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
+            renderSkillBar();
             updateStatusUi();
             updateObjsUi();
+            renderMinimap();
             syncBgm();
             pushLog(`${curChapter.title} 입장`);
         };
-        const stopIntro = () => {
-            var _a;
-            introCancel = true;
-            introPlaying = false;
-            skipIntroBtn.hidden = true;
-            (_a = this.gameIntroAudio) === null || _a === void 0 ? void 0 : _a.pause();
+        const saveGameState = (slotKey) => {
+            const chaptersSnapshot = [];
+            chapterStates.forEach((st, chId) => {
+                chaptersSnapshot.push({
+                    chapter: chId,
+                    chars: st.chars.map((c) => ({ slot: c.slot, alive: c.alive, hp: c.hp })),
+                    objs: st.objs.map((o) => ({ slot: o.slot, opened: o.opened, unlocked: o.unlocked })),
+                });
+            });
+            const snapshot = {
+                version: 4,
+                savedAt: new Date().toISOString(),
+                chapter: curChapter.chapter,
+                activeSkillIdx,
+                player: {
+                    x: Number(player.x.toFixed(2)),
+                    y: Number(player.y.toFixed(2)),
+                    hp: player.hp,
+                    maxHp: player.maxHp,
+                    mp: player.mp,
+                    maxMp: player.maxMp,
+                    dir: player.dir,
+                    swordName: player.swordName,
+                    swordPower: player.swordPower,
+                    exp: player.exp,
+                },
+                inventory: Array.from(inventory.values()),
+                chapters: chaptersSnapshot,
+            };
+            try {
+                window.localStorage.setItem(`swordsman_save_${slotKey}`, JSON.stringify(snapshot));
+                pushLog(`[저장 완료] ${slotKey} 슬롯에 상태가 기록되었습니다. (CH${curChapter.chapter}, HP ${player.hp}/${player.maxHp})`);
+            }
+            catch (err) {
+                pushLog(`[저장 실패] ${String(err)}`);
+            }
         };
-        const startIntro = async () => {
-            if (introPlaying) {
-                stopIntro();
+        const loadGameState = (slotKey) => {
+            const raw = window.localStorage.getItem(`swordsman_save_${slotKey}`);
+            if (!raw) {
+                saveGameState(slotKey);
+                pushLog(`[불러오기 완료] ${slotKey} 슬롯 초기 스냅샷 생성 및 복원됨`);
                 return;
             }
-            introPlaying = true;
-            introCancel = false;
-            skipIntroBtn.hidden = false;
-            const base = this.isGlobalHdMode() ? REMASTER_BASE : ASSET_BASE;
-            if (!this.gameIntroAudio) {
-                this.gameIntroAudio = new Audio();
-                this.gameIntroAudio.volume = 0.45;
+            try {
+                const snap = JSON.parse(raw);
+                chapterStates.clear();
+                if (snap.chapters) {
+                    for (const cSnap of snap.chapters) {
+                        const chDef = world.chapters.find((c) => c.chapter === cSnap.chapter && c.active);
+                        if (!chDef)
+                            continue;
+                        const restoredChars = chDef.chars.map((c) => {
+                            const saved = cSnap.chars.find((sc) => sc.slot === c.slot);
+                            return {
+                                ...c,
+                                alive: saved ? saved.alive : true,
+                                hp: saved ? saved.hp : c.hp,
+                                hitFlash: 0,
+                                aiCooldown: 0.8,
+                            };
+                        });
+                        const restoredObjs = chDef.objs.map((o) => {
+                            const saved = cSnap.objs.find((so) => so.slot === o.slot);
+                            return {
+                                ...o,
+                                opened: saved ? saved.opened : false,
+                                unlocked: saved ? saved.unlocked : o.kind !== 'portal' || chDef.chapter !== 0,
+                            };
+                        });
+                        chapterStates.set(cSnap.chapter, { chars: restoredChars, objs: restoredObjs });
+                    }
+                }
+                inventory.clear();
+                for (const it of snap.inventory || []) {
+                    inventory.set(it.id, { ...it });
+                }
+                activeSkillIdx = Math.max(0, Math.min(martialArts.length - 1, snap.activeSkillIdx || 0));
+                player.hp = snap.player.hp;
+                player.maxHp = snap.player.maxHp;
+                player.mp = snap.player.mp;
+                player.maxMp = snap.player.maxMp;
+                player.dir = snap.player.dir || 2;
+                player.swordName = snap.player.swordName || '화산검법';
+                player.swordPower = snap.player.swordPower || 55;
+                player.exp = snap.player.exp || 0;
+                loadChapter(snap.chapter, { x: snap.player.x, y: snap.player.y });
+                pushLog(`[불러오기 완료] ${slotKey} 슬롯 복원됨 (CH${snap.chapter}, HP ${player.hp}/${player.maxHp})`);
             }
-            this.gameIntroAudio.src = base + world.intro.tit_music;
-            this.gameIntroAudio.currentTime = 0;
-            this.gameIntroAudio.play().catch(() => { });
-            const showSeqImage = async (relPath, ms, caption) => {
-                if (introCancel)
+            catch (err) {
+                pushLog(`[불러오기 오류] ${String(err)}`);
+            }
+        };
+        const applyDamageToChar = (target, dmg, skillLabel, allowCounter) => {
+            if (!target.alive)
+                return;
+            target.hp = Math.max(0, target.hp - dmg);
+            target.hitFlash = 0.25;
+            playVoc('hit');
+            spawnFloating(target.x, target.y, `-${dmg}`, target.is_boss ? '#f4d078' : '#ff8a80');
+            if (target.hp <= 0) {
+                target.alive = false;
+                const bonus = target.is_boss ? 250 : 60;
+                player.exp += bonus;
+                spawnFloating(target.x, target.y - 0.3, `+${bonus} EXP`, '#69f0ae');
+                pushLog(`[${skillLabel}] ${target.name} 격파! (+${bonus} EXP)`);
+                updateStatusUi();
+                updateObjsUi();
+                if (target.defeat_comd !== null && curChapter.comds[target.defeat_comd]) {
+                    runComd(target.defeat_comd);
+                }
+                if (curChapter.chapter === 14 && target.is_boss) {
+                    pushLog('🏆 동방불패 격파! 진 엔딩(D9) 시퀀스로 이어집니다.');
+                    window.setTimeout(() => {
+                        if (!introPlaying)
+                            startEnding('d9');
+                    }, 1100);
+                }
+                return;
+            }
+            if (allowCounter) {
+                const counterDmg = Math.max(5, Math.min(25, Math.floor(target.attack * 0.4)));
+                player.hp = Math.max(10, player.hp - counterDmg);
+                spawnFloating(player.x, player.y, `-${counterDmg}`, '#ff7043');
+                pushLog(`${target.name}에게 ${dmg} 피해! (남은 HP ${target.hp}/${target.max_hp}, 반격 -${counterDmg})`);
+            }
+            else {
+                pushLog(`[${skillLabel}] ${target.name}에게 ${dmg} 피해! (남은 HP ${target.hp}/${target.max_hp})`);
+            }
+            updateStatusUi();
+            updateObjsUi();
+        };
+        const performAttack = () => {
+            player.state = 'attack';
+            player.stateTimer = 0.36;
+            player.animTick = 0;
+            let sk = martialArts[activeSkillIdx] || martialArts[0];
+            if (sk.mp_cost > 0 && player.mp < sk.mp_cost) {
+                if (sk.heal_hp > 0) {
+                    pushLog(`[${sk.name}] 내공이 부족합니다 (필요 MP ${sk.mp_cost}).`);
                     return;
-                try {
-                    introImg = await loadImage(relPath, base);
-                    introCaption = caption;
                 }
-                catch {
-                    introImg = null;
+                pushLog(`[${sk.name}] 내공 부족으로 기본 [화산검법]으로 전환합니다.`);
+                sk = martialArts[0];
+            }
+            if (sk.mp_cost > 0) {
+                player.mp = Math.max(0, player.mp - sk.mp_cost);
+            }
+            // 1. Qi Healing skill (자하진기)
+            if (sk.heal_hp > 0) {
+                playVoc('chest');
+                player.hp = Math.min(player.maxHp, player.hp + sk.heal_hp);
+                spawnPulse(player.x, player.y, 2.2, sk.color);
+                spawnFloating(player.x, player.y, `+${sk.heal_hp} HP`, sk.color);
+                pushLog(`[${sk.name}] 운기조식으로 체력 +${sk.heal_hp} 회복! (MP -${sk.mp_cost})`);
+                updateStatusUi();
+                return;
+            }
+            playVoc('sword');
+            const st = getCurState();
+            // 2. AOE Drain skill (흡성대법)
+            if (sk.aoe) {
+                spawnPulse(player.x, player.y, sk.range, sk.color);
+                const targets = st.chars.filter((ch) => ch.alive && Math.hypot(ch.x - player.x, ch.y - player.y) <= sk.range);
+                if (targets.length === 0) {
+                    pushLog(`[${sk.name}] 주변 ${sk.range}타일 내에 적이 없습니다. (MP -${sk.mp_cost})`);
+                    updateStatusUi();
+                    return;
                 }
-                await new Promise((res) => window.setTimeout(res, ms));
-            };
-            pushLog('오프닝 시퀀스 재생: GT 로고 → TIT 타이틀');
-            for (let i = 0; i < world.intro.gt_screens.length; i++) {
-                if (introCancel)
-                    break;
-                await showSeqImage(world.intro.gt_screens[i], 1400, `SOFT-WORLD 1993 · INTRO ${i + 1}/2`);
+                let totalDmg = 0;
+                for (const ch of targets) {
+                    const dmg = sk.damage + Math.floor(Math.random() * 18);
+                    totalDmg += dmg;
+                    applyDamageToChar(ch, dmg, sk.name, false);
+                }
+                const absorbHp = Math.min(80, Math.round(totalDmg * 0.2));
+                const absorbMp = Math.min(35, Math.round(totalDmg * 0.1));
+                player.hp = Math.min(player.maxHp, player.hp + absorbHp);
+                player.mp = Math.min(player.maxMp, player.mp + absorbMp);
+                spawnFloating(player.x, player.y, `흡수 +${absorbHp} HP`, '#b388ff');
+                pushLog(`[${sk.name}] ${targets.length}명 타격! (+${absorbHp} HP / +${absorbMp} MP 흡수)`);
+                updateStatusUi();
+                return;
             }
-            const titImgs = await Promise.all(world.intro.tit_frames.map((f) => loadImage(f, base).catch(() => null)));
-            for (let i = 0; i < titImgs.length; i++) {
-                if (introCancel)
-                    break;
-                introImg = titImgs[i];
-                introCaption = `소오강호 (동방불패 · SwordsMan) TITLE ${i + 1}/${titImgs.length}`;
-                await new Promise((res) => window.setTimeout(res, 95));
+            // 3. Ranged Projectile skill (독고구검 / 벽사검법)
+            if (sk.proj) {
+                let dirX = 0;
+                let dirY = 1;
+                let nearest = null;
+                let bestDist = sk.range + 2.5;
+                for (const ch of st.chars) {
+                    if (!ch.alive)
+                        continue;
+                    const d = Math.hypot(ch.x - player.x, ch.y - player.y);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        nearest = ch;
+                    }
+                }
+                if (nearest) {
+                    const d = Math.max(0.01, Math.hypot(nearest.x - player.x, nearest.y - player.y));
+                    dirX = (nearest.x - player.x) / d;
+                    dirY = (nearest.y - player.y) / d;
+                    player.dir = Math.abs(dirX) >= Math.abs(dirY) ? (dirX >= 0 ? 1 : 3) : dirY >= 0 ? 2 : 0;
+                }
+                else {
+                    const dirVecs = [
+                        [0, -1],
+                        [1, 0],
+                        [0, 1],
+                        [-1, 0],
+                    ];
+                    const dv = dirVecs[player.dir % 4];
+                    dirX = dv[0];
+                    dirY = dv[1];
+                }
+                const speed = 13.5;
+                projectiles.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: dirX * speed,
+                    vy: dirY * speed,
+                    life: sk.range / speed + 0.12,
+                    maxLife: sk.range / speed + 0.12,
+                    damage: Math.max(sk.damage, player.swordPower + 25) + Math.floor(Math.random() * 18),
+                    color: sk.color,
+                    name: sk.name,
+                    pierced: new Set(),
+                });
+                pushLog(`[${sk.name}] 장풍/검기 발사! (MP -${sk.mp_cost})`);
+                updateStatusUi();
+                return;
             }
-            stopIntro();
+            // 4. Default Melee skill (화산검법)
+            let target = null;
+            let bestDist = sk.range || 3.2;
+            for (const ch of st.chars) {
+                if (!ch.alive)
+                    continue;
+                const d = Math.hypot(ch.x - player.x, ch.y - player.y);
+                if (d < bestDist) {
+                    bestDist = d;
+                    target = ch;
+                }
+            }
+            if (!target) {
+                pushLog(`허공에 [${sk.name}] 검기를 펼쳤습니다.`);
+                return;
+            }
+            const dx = target.x - player.x;
+            const dy = target.y - player.y;
+            player.dir = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 1 : 3) : dy >= 0 ? 2 : 0;
+            const basePower = Math.max(sk.damage, player.swordPower);
+            const dmg = basePower + Math.floor(Math.random() * 16);
+            applyDamageToChar(target, dmg, sk.name, true);
         };
         const drawSprite = (sprId, wx, wy) => {
             if (!sprId)
@@ -1655,6 +2067,56 @@ class SwordsManExplorer {
             tallItems.sort((a, b) => a.depth - b.depth);
             for (const item of tallItems)
                 item.draw();
+            // 3. Expanding Qi/AOE pulse rings
+            for (const ring of pulseRings) {
+                const t = 1 - ring.life / Math.max(0.01, ring.maxLife);
+                const rIso = worldToIso(ring.x, ring.y);
+                const sx = W / 2 + (rIso.ix - camIso.ix) * SCALE;
+                const sy = H / 2 + (rIso.iy - camIso.iy) * SCALE;
+                const rx = Math.max(8, ring.maxR * 28 * t);
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, 0.75 * (1 - t));
+                ctx.strokeStyle = ring.color;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.ellipse(sx, sy, rx, rx * 0.52, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+            // 4. Flying sword-qi projectiles
+            for (const proj of projectiles) {
+                const pIso = worldToIso(proj.x, proj.y);
+                const sx = W / 2 + (pIso.ix - camIso.ix) * SCALE;
+                const sy = H / 2 + (pIso.iy - camIso.iy) * SCALE - 24;
+                ctx.save();
+                ctx.fillStyle = proj.color;
+                ctx.shadowColor = proj.color;
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(sx, sy, 2.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            // 5. Floating damage & heal popups
+            ctx.save();
+            ctx.font = 'bold 13px "Malgun Gothic", sans-serif';
+            ctx.textAlign = 'center';
+            for (const ft of floatingTexts) {
+                const progress = 1 - ft.life / Math.max(0.01, ft.maxLife);
+                const fIso = worldToIso(ft.x, ft.y);
+                const sx = W / 2 + (fIso.ix - camIso.ix) * SCALE;
+                const sy = H / 2 + (fIso.iy - camIso.iy) * SCALE - 58 - progress * 24;
+                ctx.globalAlpha = Math.max(0, 1 - progress * 0.85);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+                ctx.fillText(ft.text, sx + 1, sy + 1);
+                ctx.fillStyle = ft.color;
+                ctx.fillText(ft.text, sx, sy);
+            }
+            ctx.restore();
             // Top-left chapter HUD pill
             ctx.fillStyle = 'rgba(11, 14, 20, 0.78)';
             ctx.fillRect(10, 10, 320, 26);
@@ -1713,16 +2175,94 @@ class SwordsManExplorer {
         };
         let lastTs = performance.now();
         let accumAnim = 0;
+        let accumRegen = 0;
         const tickLoop = (now) => {
             var _a;
             const dt = Math.min(0.05, (now - lastTs) / 1000);
             lastTs = now;
             const tabActive = (_a = document.getElementById('tab-play')) === null || _a === void 0 ? void 0 : _a.classList.contains('active');
             if (tabActive) {
+                const st = getCurState();
                 player.hazardCooldown = Math.max(0, player.hazardCooldown - dt);
-                for (const ch of getCurState().chars) {
+                for (const ch of st.chars) {
                     if (ch.hitFlash > 0)
                         ch.hitFlash = Math.max(0, ch.hitFlash - dt);
+                }
+                // Update pulse rings
+                for (let i = pulseRings.length - 1; i >= 0; i--) {
+                    pulseRings[i].life -= dt;
+                    if (pulseRings[i].life <= 0)
+                        pulseRings.splice(i, 1);
+                }
+                // Update floating damage/heal texts
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    floatingTexts[i].life -= dt;
+                    if (floatingTexts[i].life <= 0)
+                        floatingTexts.splice(i, 1);
+                }
+                // Update flying martial arts projectiles
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const p = projectiles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.life -= dt;
+                    for (const ch of st.chars) {
+                        if (!ch.alive || p.pierced.has(ch.slot))
+                            continue;
+                        if (Math.hypot(ch.x - p.x, ch.y - p.y) < 1.35) {
+                            p.pierced.add(ch.slot);
+                            applyDamageToChar(ch, p.damage, p.name, false);
+                        }
+                    }
+                    if (p.life <= 0 || p.x < 0 || p.y < 0 || p.x >= curChapter.map_w || p.y >= curChapter.map_h) {
+                        projectiles.splice(i, 1);
+                    }
+                }
+                // Gentle inner Qi MP recovery
+                accumRegen += dt;
+                if (accumRegen >= 0.8) {
+                    accumRegen = 0;
+                    if (player.mp < player.maxMp) {
+                        player.mp = Math.min(player.maxMp, player.mp + 2);
+                        updateStatusUi();
+                    }
+                }
+                // Enemy AI aggro & counter-engagement
+                if (aiChk.checked && !introPlaying && !activeComd) {
+                    for (const ch of st.chars) {
+                        if (!ch.alive)
+                            continue;
+                        ch.aiCooldown = Math.max(0, ch.aiCooldown - dt);
+                        const dist = Math.hypot(player.x - ch.x, player.y - ch.y);
+                        if (dist > 1.75 && dist <= 5.5) {
+                            const step = (1.55 * dt) / dist;
+                            const nx = ch.x + (player.x - ch.x) * step;
+                            const ny = ch.y + (player.y - ch.y) * step;
+                            if (isWalkable(nx, ny)) {
+                                ch.x = nx;
+                                ch.y = ny;
+                            }
+                            ch.dir = Math.abs(player.x - ch.x) >= Math.abs(player.y - ch.y)
+                                ? player.x >= ch.x ? 1 : 3
+                                : player.y >= ch.y ? 2 : 0;
+                        }
+                        else if (dist <= 1.85 && ch.aiCooldown <= 0) {
+                            ch.aiCooldown = 1.65;
+                            const aiDmg = Math.max(4, Math.min(20, Math.floor(ch.attack * 0.35)));
+                            if (player.hp - aiDmg <= 10) {
+                                player.hp = Math.min(player.maxHp, player.hp + 80);
+                                spawnPulse(player.x, player.y, 1.8, '#69f0ae');
+                                spawnFloating(player.x, player.y, '호신진기 +80', '#69f0ae');
+                                pushLog('위기 호신진기 자동 발동! 체력 +80 보호');
+                            }
+                            else {
+                                player.hp -= aiDmg;
+                                spawnFloating(player.x, player.y, `-${aiDmg}`, '#ff8a65');
+                                pushLog(`[적 교전] ${ch.name}의 공격 (-${aiDmg} HP)`);
+                            }
+                            updateStatusUi();
+                        }
+                    }
                 }
                 if (player.state === 'attack') {
                     player.stateTimer -= dt;
@@ -1790,6 +2330,7 @@ class SwordsManExplorer {
                     player.animTick += 1;
                 }
                 renderFrame();
+                renderMinimap();
             }
             window.requestAnimationFrame(tickLoop);
         };
@@ -1805,6 +2346,51 @@ class SwordsManExplorer {
         introBtn.addEventListener('click', () => startIntro());
         skipIntroBtn.addEventListener('click', stopIntro);
         bgmBtn.addEventListener('click', () => syncBgm(bgmBtn.dataset.bgm !== 'on'));
+        endingBtn.addEventListener('click', () => startEnding(endingSel.value || 'd9'));
+        saveBtn.addEventListener('click', () => saveGameState(saveSlotSel.value || 'SV0'));
+        loadBtn.addEventListener('click', () => loadGameState(saveSlotSel.value || 'SV0'));
+        skillBar.addEventListener('click', (e) => {
+            const btn = e.target.closest('.skill-slot-btn');
+            if (!btn)
+                return;
+            const idx = Number(btn.dataset.skillIdx);
+            if (!Number.isNaN(idx) && idx >= 0 && idx < martialArts.length) {
+                activeSkillIdx = idx;
+                renderSkillBar();
+                updateStatusUi();
+                pushLog(`무공 선택: [${martialArts[idx].name}] (MP 소모 ${martialArts[idx].mp_cost})`);
+            }
+        });
+        invList.addEventListener('click', (e) => {
+            const row = e.target.closest('.inv-row');
+            if (!row)
+                return;
+            const id = Number(row.dataset.itemId);
+            if (!Number.isNaN(id))
+                useInventoryItem(id);
+        });
+        minimapCanvas.addEventListener('click', (e) => {
+            if (introPlaying)
+                return;
+            const rect = minimapCanvas.getBoundingClientRect();
+            const gx = Math.max(1, Math.min(curChapter.map_w - 2, ((e.clientX - rect.left) / rect.width) * curChapter.map_w));
+            const gy = Math.max(1, Math.min(curChapter.map_h - 2, ((e.clientY - rect.top) / rect.height) * curChapter.map_h));
+            if (e.shiftKey && isWalkable(gx, gy)) {
+                player.x = gx;
+                player.y = gy;
+                player.moveTarget = null;
+                camera.x = gx;
+                camera.y = gy;
+                coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
+                pushLog(`미니맵 즉시 이동: (${gx.toFixed(1)}, ${gy.toFixed(1)})`);
+            }
+            else {
+                player.moveTarget = { x: gx, y: gy, pendingObj: null };
+                pushLog(`미니맵 길찾기 목표: (${Math.round(gx)}, ${Math.round(gy)})`);
+            }
+            renderMinimap();
+            updateObjsUi();
+        });
         dlgNextBtn.addEventListener('click', () => {
             if (!activeComd)
                 return;
@@ -1865,6 +2451,7 @@ class SwordsManExplorer {
                 camera.y = player.y;
                 coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
                 updateObjsUi();
+                renderMinimap();
                 pushLog(`${ch.name} 앞으로 이동 (Space/공격으로 전투)`);
                 return;
             }
@@ -1879,6 +2466,7 @@ class SwordsManExplorer {
             coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
             interactWithObj(obj);
             updateObjsUi();
+            renderMinimap();
         });
         window.addEventListener('keydown', (e) => {
             var _a, _b;
@@ -1888,6 +2476,26 @@ class SwordsManExplorer {
             if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT')
                 return;
             const k = e.key.toLowerCase();
+            if (k === 'f5') {
+                e.preventDefault();
+                saveGameState(saveSlotSel.value || 'QUICK');
+                return;
+            }
+            if (k === 'f9') {
+                e.preventDefault();
+                loadGameState(saveSlotSel.value || 'QUICK');
+                return;
+            }
+            if (k >= '1' && k <= '5') {
+                const idx = Number(k) - 1;
+                if (idx < martialArts.length) {
+                    activeSkillIdx = idx;
+                    renderSkillBar();
+                    updateStatusUi();
+                    pushLog(`무공 전환: [${martialArts[idx].name}]`);
+                }
+                return;
+            }
             if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) {
                 e.preventDefault();
             }

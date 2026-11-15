@@ -103,6 +103,118 @@ PHASE_KOREAN_NAMES: dict[str, str] = {
     "slashman": "검객",
 }
 
+MARTIAL_ARTS: list[dict[str, Any]] = [
+    {
+        "id": "huashan",
+        "key": "1",
+        "name": "화산검법",
+        "mp_cost": 0,
+        "damage": 55,
+        "range": 3.2,
+        "proj": False,
+        "aoe": False,
+        "heal_hp": 0,
+        "heal_mp": 0,
+        "color": "#ffe082",
+        "desc": "화산파 기본 검술 (근접 베기, 내공 소모 없음)",
+    },
+    {
+        "id": "dugu",
+        "key": "2",
+        "name": "독고구검",
+        "mp_cost": 15,
+        "damage": 95,
+        "range": 7.5,
+        "proj": True,
+        "aoe": False,
+        "heal_hp": 0,
+        "heal_mp": 0,
+        "color": "#4dd0e1",
+        "desc": "풍청양 전수 무상검기 (관통 검기 투사체 발사)",
+    },
+    {
+        "id": "bixie",
+        "key": "3",
+        "name": "벽사검법",
+        "mp_cost": 22,
+        "damage": 135,
+        "range": 6.5,
+        "proj": True,
+        "aoe": False,
+        "heal_hp": 0,
+        "heal_mp": 0,
+        "color": "#ff6e80",
+        "desc": "규화보전 계통 초고속 적색 검강 (고화력 투사체)",
+    },
+    {
+        "id": "xixing",
+        "key": "4",
+        "name": "흡성대법",
+        "mp_cost": 30,
+        "damage": 110,
+        "range": 5.0,
+        "proj": False,
+        "aoe": True,
+        "heal_hp": 0,
+        "heal_mp": 0,
+        "color": "#b388ff",
+        "desc": "임아행의 패도 내공 (주변 적 광역 피해 + HP/MP 흡수)",
+    },
+    {
+        "id": "zixia",
+        "key": "5",
+        "name": "자하진기",
+        "mp_cost": 25,
+        "damage": 0,
+        "range": 0.0,
+        "proj": False,
+        "aoe": False,
+        "heal_hp": 90,
+        "heal_mp": 0,
+        "color": "#69f0ae",
+        "desc": "화산파 상승 내공 운기조식 (즉시 체력 +90 회복)",
+    },
+]
+
+ENDINGS_META: dict[str, dict[str, Any]] = {
+    "em1": {
+        "id": "em1",
+        "title": "엔딩 1 (EM1) · 화산의 검객, 강호에 남다",
+        "music": "audio/adlib/em1_theme.wav",
+        "gif": "cutscenes/em1/em1.gif",
+        "frame_prefix": "cutscenes/em1/em1_",
+        "frame_count": 58,
+        "caption": "정파와 마교의 분쟁을 뒤로하고 영호충은 홀로 강호의 바람이 된다.",
+    },
+    "em2": {
+        "id": "em2",
+        "title": "엔딩 2 (EM2) · 소오강호(笑傲江湖)의 합주",
+        "music": "audio/adlib/em1_theme.wav",
+        "gif": "cutscenes/em2/em2.gif",
+        "frame_prefix": "cutscenes/em2/em2_",
+        "frame_count": 117,
+        "caption": "유정풍과 곡양의 금소합주보를 이어받아 임영영과 함께 속세를 떠나 합주한다.",
+    },
+    "em3": {
+        "id": "em3",
+        "title": "엔딩 3 (EM3) · 독고구검의 전승자",
+        "music": "audio/adlib/em1_theme.wav",
+        "gif": "cutscenes/em3/em3.gif",
+        "frame_prefix": "cutscenes/em3/em3_",
+        "frame_count": 262,
+        "caption": "화산 사과암의 깨달음을 바탕으로 무림의 진정한 태평을 연다.",
+    },
+    "d9": {
+        "id": "d9",
+        "title": "진 엔딩 (D9) · 흑목애 결전과 강호 은거",
+        "music": "audio/adlib/d9_theme.wav",
+        "gif": "cutscenes/d9/d9.gif",
+        "frame_prefix": "cutscenes/d9/d9_",
+        "frame_count": 375,
+        "caption": "흑목애에서 동방불패와의 혈전을 끝내고, 모든 권력 다툼을 버린 채 자유를 택한다.",
+    },
+}
+
 
 def decode_cp949(raw: bytes) -> str:
     return raw.split(b"\x00", 1)[0].decode("cp949", "replace")
@@ -265,6 +377,8 @@ def build_chapter(ch: int, sprite_info: dict[str, Any]) -> dict[str, Any]:
             "ter": [],
             "phases": [],
             "items": [],
+            "magics": [],
+            "bullets": [],
             "comds": [],
             "chars": [],
             "objs": [],
@@ -328,6 +442,31 @@ def build_chapter(ch: int, sprite_info: dict[str, Any]) -> dict[str, Any]:
                 "effect_id": int(words[6]) if len(words) > 6 else 0,
             }
         )
+
+    # 3b. MAGIC table (hdr[4] .. hdr[5]-1) & BULLET table (hdr[8] .. hdr[9]-1)
+    magics: list[dict[str, Any]] = []
+    if 0 <= hdr[4] < hdr[5] <= cnt:
+        for m_idx in range(hdr[4], hdr[5]):
+            mname, words = read_named_words(get_entry(m_idx))
+            magics.append(
+                {
+                    "id": m_idx - hdr[4],
+                    "name": mname,
+                    "words": list(words[:10]),
+                }
+            )
+
+    bullets: list[dict[str, Any]] = []
+    if 0 <= hdr[8] < hdr[9] <= cnt:
+        for b_idx in range(hdr[8], hdr[9]):
+            bname, words = read_named_words(get_entry(b_idx))
+            bullets.append(
+                {
+                    "id": b_idx - hdr[8],
+                    "name": bname,
+                    "words": list(words[:10]),
+                }
+            )
 
     # 4. COMD scripts (hdr[6] .. hdr[7]-1)
     comds: list[dict[str, Any]] = []
@@ -479,10 +618,24 @@ def build_chapter(ch: int, sprite_info: dict[str, Any]) -> dict[str, Any]:
         "ter": ter_list,
         "phases": phases,
         "items": items,
+        "magics": magics,
+        "bullets": bullets,
         "comds": comds,
         "chars": chars,
         "objs": objs,
     }
+
+
+def sample_ending_frames(eid: str, meta: dict[str, Any], max_frames: int = 36) -> list[str]:
+    total = int(meta.get("frame_count", 0))
+    prefix = str(meta.get("frame_prefix", ""))
+    if total <= 0:
+        return []
+    if total <= max_frames:
+        indices = list(range(total))
+    else:
+        indices = sorted({min(total - 1, round(i * (total - 1) / (max_frames - 1))) for i in range(max_frames)})
+    return [f"{prefix}{idx:03d}.png" for idx in indices]
 
 
 def main() -> None:
@@ -514,10 +667,19 @@ def main() -> None:
         else:
             print(f"CH{ch:02d} (inactive)")
 
+    endings_payload: dict[str, Any] = {}
+    for eid, meta in ENDINGS_META.items():
+        endings_payload[eid] = {
+            **meta,
+            "frames": sample_ending_frames(eid, meta, max_frames=36),
+        }
+
     payload = {
-        "version": 1,
+        "version": 2,
         "active_chapters": [c["chapter"] for c in chapters if c["active"]],
         "speaker_names": {str(k): v for k, v in SPEAKER_NAMES.items()},
+        "martial_arts": MARTIAL_ARTS,
+        "endings": endings_payload,
         "intro": {
             "gt_screens": ["cutscenes/gt/gt_scene_0.png", "cutscenes/gt/gt_scene_1.png"],
             "tit_frames": [f"cutscenes/tit/tit_frame_{i:02d}.png" for i in range(28)],
