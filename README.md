@@ -1,0 +1,23 @@
+# 《소오강호 (동방불패, 1993)》 리마스터 프로젝트 (SwordsMan Remaster)
+
+1993년 대만 지관과기(Soft-World International)에서 제작하고 국내에 《동방불패》로 정식 한글화 출시된 MS-DOS 무협 액션 RPG 《소오강호(笑傲江湖 / Swordsman)》를 현대 웹/데스크톱 환경(TypeScript + HTML5 Canvas/WebGL)으로 충실히 재현하고 화질·음질·UI·조작성을 개선하는 리마스터 프로젝트입니다.
+
+## 주요 문서
+* [개발 계획서 (DEVELOPMENT_PLAN.md)](./DEVELOPMENT_PLAN.md)
+
+## 디렉터리 구조
+* `sm/` — 1993년 MS-DOS 원본 게임 파일 전체 (디스크 1~9 무결성 보존)
+* `tools/` — 원본 바이너리/LZSS/RLE/OPL2/PCM/폰트 추출 및 리마스터링 파이프라인
+* `assets/extracted/` — 원본에서 추출된 PNG, GIF, WAV, MIDI, JSON 에셋
+* `src/`, `public/`, `server.js` — 웹 기반 에셋 브라우저 및 TypeScript/Canvas 리마스터 엔진
+
+## 로컬 실행 환경
+* **Node.js**: `v14.15.1` 호환 (`npm 6.14.8`)
+* **개발 서버 포트**: `5188` (`http://localhost:5188`)
+
+## 진행 현황
+* [x] **사전 검토**: 바이너리 역공학, 압축 알고리즘 해독 및 타당성 보고서 완료
+* [ ] **Phase 1**: 전체 에셋 무손실 추출 및 웹 에셋 브라우저 구축
+* [ ] **Phase 2**: 그래픽 고화질 업스케일링 및 사운드 리마스터링
+* [ ] **Phase 3**: 코어 엔진 이식 및 오프닝·월드·이벤트 구동
+* [ ] **Phase 4**: 전투·UI/HUD 완성, 실시간 클래식↔리마스터 토글 및 멀티 엔딩 통합
