@@ -22,3 +22,7 @@ npm-debug.log*
 tmp/
 temp/
 scratch/
+
+# Original DOS game files & extracted/remastered assets (kept locally only)
+sm/
+assets/
