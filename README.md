@@ -17,15 +17,16 @@
 * **개발 서버 포트**: `5188` (`http://127.0.0.1:5188`)
 ```bash
 npm install
-npm run extract   # sm/ 원본에서 assets/extracted/ 전수 추출 (이미 추출됨)
-npm run remaster  # Phase 2 화질·음질 리마스터 에셋 생성 (assets/remastered/)
-npm run build     # src/main.ts -> public/app.js 컴파일
-npm start         # http://127.0.0.1:5188 웹 리마스터 스튜디오 실행
+npm run extract     # sm/ 원본에서 assets/extracted/ 전수 추출 (이미 추출됨)
+npm run remaster    # Phase 2 화질·음질 리마스터 에셋 생성 (assets/remastered/)
+npm run world-data  # Phase 3 월드/챕터/이벤트 데이터 생성 (chapters_data.json)
+npm run build       # src/main.ts -> public/app.js 컴파일
+npm start           # http://127.0.0.1:5188 웹 리마스터 엔진 및 스튜디오 실행
 ```
 
 ## 진행 현황
 * [x] **사전 검토**: 바이너리 역공학, 압축 알고리즘 해독 및 타당성 보고서 완료
 * [x] **Phase 1**: 전체 에셋 무손실 추출(`1,189`파일, `77.76MB`) 및 포트 `5188` 웹 에셋 브라우저 구축·검증 완료
 * [x] **Phase 2**: 그래픽·사운드 리마스터링(`1,159`파일, `118.96MB`) 및 6개 탭 A/B 비교 스튜디오 구축·검증 완료
-* [ ] **Phase 3**: 코어 엔진 이식 및 오프닝·월드·이벤트 구동
-* [ ] **Phase 4**: 전투·UI/HUD 완성, 실시간 클래식↔리마스터 토글 및 멀티 엔딩 통합
+* [x] **Phase 3**: 코어 엔진 이식 및 오프닝(`GT→TIT`)·쿼터뷰 월드(12챕터)·`COMD` 이벤트·전투·`KFONT.15` 대화창·실시간 HD↔DOS 전환 구축·검증 완료
+* [ ] **Phase 4**: 전투·무공·UI/HUD 고도화, 세이브/로드(`SV0~SV2` 호환) 및 멀티 엔딩(`EM1~3`, `D9`) 통합

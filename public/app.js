@@ -33,6 +33,122 @@ function drawWithFilter(ctx, img, filterMode, targetW, targetH) {
         ctx.fillRect(0, 0, targetW, targetH);
     }
 }
+function renderKfontBitmapCanvas(canvas, text, mode, fontBitmaps, scale = 2, bgColor = '#07090e') {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, w, h);
+    const isPhase2 = mode === 'phase2';
+    const isRemaster = mode === 'remaster' || isPhase2;
+    const lineStep = 18 * scale;
+    let cursorX = 10;
+    let cursorY = 10;
+    const maxW = w - 16;
+    const decodeBitmap = (hex, cols) => {
+        const grid = [];
+        const bytesPerRow = cols === 16 ? 2 : 1;
+        for (let r = 0; r < 16; r++) {
+            const rowHex = hex.slice(r * bytesPerRow * 2, (r + 1) * bytesPerRow * 2);
+            const val = parseInt(rowHex, 16) || 0;
+            const row = [];
+            for (let c = 0; c < cols; c++) {
+                row.push((val >> (cols - 1 - c)) & 1);
+            }
+            grid.push(row);
+        }
+        return grid;
+    };
+    const drawGlyphBits = (hex, cols, gx, gy, fill) => {
+        ctx.fillStyle = fill;
+        const grid = decodeBitmap(hex, cols);
+        if (!isPhase2 || scale !== 2) {
+            for (let r = 0; r < 16; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (grid[r][c]) {
+                        ctx.fillRect(gx + c * scale, gy + r * scale, scale, scale);
+                    }
+                }
+            }
+            return;
+        }
+        const at = (rr, cc) => rr >= 0 && rr < 16 && cc >= 0 && cc < cols ? grid[rr][cc] : 0;
+        for (let r = 0; r < 16; r++) {
+            for (let c = 0; c < cols; c++) {
+                const p = at(r, c);
+                const a = at(r - 1, c);
+                const b = at(r, c + 1);
+                const cl = at(r, c - 1);
+                const d = at(r + 1, c);
+                const e0 = cl === a && cl !== d && a !== b ? a : p;
+                const e1 = a === b && a !== cl && b !== d ? b : p;
+                const e2 = d === cl && d !== b && cl !== a ? cl : p;
+                const e3 = b === d && b !== a && d !== cl ? d : p;
+                if (e0)
+                    ctx.fillRect(gx + c * 2, gy + r * 2, 1, 1);
+                if (e1)
+                    ctx.fillRect(gx + c * 2 + 1, gy + r * 2, 1, 1);
+                if (e2)
+                    ctx.fillRect(gx + c * 2, gy + r * 2 + 1, 1, 1);
+                if (e3)
+                    ctx.fillRect(gx + c * 2 + 1, gy + r * 2 + 1, 1, 1);
+            }
+        }
+    };
+    const makeFill = (gy) => {
+        if (!isPhase2)
+            return isRemaster ? '#ffe9b8' : '#f2e0b2';
+        const grad = ctx.createLinearGradient(0, gy, 0, gy + 16 * scale);
+        grad.addColorStop(0, '#fff4cf');
+        grad.addColorStop(0.5, '#f4d078');
+        grad.addColorStop(1, '#cf9435');
+        return grad;
+    };
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '\n') {
+            cursorX = 10;
+            cursorY += lineStep;
+            continue;
+        }
+        const code = ch.charCodeAt(0);
+        if (code < 128) {
+            const glyphHex = fontBitmaps.ascii_8x16[code] || fontBitmaps.ascii_8x16[32];
+            if (cursorX + 8 * scale > maxW) {
+                cursorX = 10;
+                cursorY += lineStep;
+            }
+            if (cursorY + 16 * scale > h)
+                break;
+            if (isRemaster) {
+                drawGlyphBits(glyphHex, 8, cursorX + 2, cursorY + 2, isPhase2 ? '#1a0c0c' : '#111622');
+            }
+            drawGlyphBits(glyphHex, 8, cursorX, cursorY, isPhase2 ? makeFill(cursorY) : isRemaster ? '#ffe9b8' : '#e6d2a0');
+            cursorX += 9 * scale;
+        }
+        else {
+            const glyphHex = fontBitmaps.hangul_16x16[ch];
+            if (cursorX + 16 * scale > maxW) {
+                cursorX = 10;
+                cursorY += lineStep;
+            }
+            if (cursorY + 16 * scale > h)
+                break;
+            if (glyphHex) {
+                if (isRemaster) {
+                    drawGlyphBits(glyphHex, 16, cursorX + 2, cursorY + 2, isPhase2 ? '#240d0d' : '#2b1212');
+                }
+                drawGlyphBits(glyphHex, 16, cursorX, cursorY, makeFill(cursorY));
+            }
+            else {
+                ctx.fillStyle = '#d4a853';
+                ctx.font = `${14 * scale}px "Malgun Gothic", sans-serif`;
+                ctx.fillText(ch, cursorX, cursorY + 14 * scale);
+            }
+            cursorX += 17 * scale;
+        }
+    }
+}
 class SwordsManExplorer {
     constructor() {
         this.spritesIndexHd = null;
@@ -53,18 +169,31 @@ class SwordsManExplorer {
         this.audioCtx = null;
         this.analyser = null;
         this.waveRaf = null;
+        // Phase 3 Core Engine state
+        this.worldData = null;
+        this.gameSheetOrigCache = new Map();
+        this.gameSheetHdCache = new Map();
+        this.gameMapCache = new Map();
+        this.gameBgmAudio = null;
+        this.gameIntroAudio = null;
+        this.gameOnModeChange = null;
+    }
+    isGlobalHdMode() {
+        const btn = document.getElementById('globalModeToggle');
+        return !btn || btn.dataset.mode === 'remastered';
     }
     async init() {
         this.setupTabs();
         const statusPill = document.getElementById('statusPill');
         try {
-            const [cat, pal, spr, sprHd, dlg, fnt] = await Promise.all([
+            const [cat, pal, spr, sprHd, dlg, fnt, world] = await Promise.all([
                 fetchJson('catalog.json'),
                 fetchJson('ui/palette.json'),
                 fetchJson('events/sprites_index.json'),
                 fetchJson('events/sprites_index_hd.json', REMASTER_BASE).catch(() => null),
                 fetchJson('events/dialogues_ko.json'),
                 fetchJson('fonts/font_bitmaps.json'),
+                fetchJson('world/chapters_data.json').catch(() => null),
             ]);
             this.catalog = cat;
             this.palettes = pal;
@@ -72,8 +201,11 @@ class SwordsManExplorer {
             this.spritesIndexHd = sprHd;
             this.dialogues = dlg;
             this.fontBitmaps = fnt;
+            this.worldData = world;
+            const chCount = world ? world.active_chapters.length : 0;
             statusPill.textContent =
-                `Phase 2 리마스터 · 인물 ${cat.faces.count} (4x EPX) · 스프라이트 ${cat.events.total_sprites} (2x EPX) · 대사 ${cat.events.total_dialogues} · 오디오 ${cat.audio.voc_count + cat.audio.adlib_count}`;
+                `Phase 3 엔진(${chCount}챕터) · 인물 ${cat.faces.count} (4x EPX) · 스프라이트 ${cat.events.total_sprites} (2x EPX) · 대사 ${cat.events.total_dialogues}`;
+            this.setupGameEngine();
             this.renderOverview();
             this.setupCutscenes();
             this.renderFaces();
@@ -109,6 +241,9 @@ class SwordsManExplorer {
             syncSelect('worldRemasterToggle', nextHd ? 'remastered' : 'extracted');
             syncSelect('vocRemasterToggle', nextHd ? 'remastered' : 'extracted');
             syncSelect('fontRenderMode', nextHd ? 'phase2' : 'dos');
+            if (this.gameOnModeChange) {
+                this.gameOnModeChange();
+            }
         });
     }
     setupTabs() {
@@ -684,16 +819,8 @@ class SwordsManExplorer {
                     .map((c) => `<option value="${c.chapter}">Chapter ${c.chapter} (${c.line_count}줄)</option>`)
                     .join('');
         const drawKfontText = () => {
-            const ctx = kfontCanvas.getContext('2d');
-            const scale = 2;
-            const w = kfontCanvas.width;
-            const h = kfontCanvas.height;
-            ctx.fillStyle = '#07090e';
-            ctx.fillRect(0, 0, w, h);
             const text = kfontInput.value || '';
             const mode = modeSel.value;
-            const isPhase2 = mode === 'phase2';
-            const isRemaster = mode === 'remaster' || isPhase2;
             if (kfontSheetImg) {
                 const hdSrc = `${REMASTER_BASE}fonts/kfont_15_hangul_hd.png`;
                 const origSrc = `${ASSET_BASE}fonts/kfont_15_hangul.png`;
@@ -707,111 +834,7 @@ class SwordsManExplorer {
                         ? '원본 KFONT.15 한글 2,350자 전체 시트:'
                         : 'Phase 2 KFONT.15 EPX 2x 리마스터 시트 미리보기:';
             }
-            let cursorX = 12;
-            let cursorY = 14;
-            const maxW = w - 20;
-            const decodeBitmap = (hex, cols) => {
-                const grid = [];
-                const bytesPerRow = cols === 16 ? 2 : 1;
-                for (let r = 0; r < 16; r++) {
-                    const rowHex = hex.slice(r * bytesPerRow * 2, (r + 1) * bytesPerRow * 2);
-                    const val = parseInt(rowHex, 16) || 0;
-                    const row = [];
-                    for (let c = 0; c < cols; c++) {
-                        row.push((val >> (cols - 1 - c)) & 1);
-                    }
-                    grid.push(row);
-                }
-                return grid;
-            };
-            const drawGlyphBits = (hex, cols, gx, gy, fill) => {
-                ctx.fillStyle = fill;
-                const grid = decodeBitmap(hex, cols);
-                if (!isPhase2) {
-                    for (let r = 0; r < 16; r++) {
-                        for (let c = 0; c < cols; c++) {
-                            if (grid[r][c]) {
-                                ctx.fillRect(gx + c * scale, gy + r * scale, scale, scale);
-                            }
-                        }
-                    }
-                    return;
-                }
-                // Binary EPX / Scale2x curve smoothing on 2x subpixel grid (1px per subpixel = same 16*2=32px size)
-                const at = (rr, cc) => rr >= 0 && rr < 16 && cc >= 0 && cc < cols ? grid[rr][cc] : 0;
-                for (let r = 0; r < 16; r++) {
-                    for (let c = 0; c < cols; c++) {
-                        const p = at(r, c);
-                        const a = at(r - 1, c);
-                        const b = at(r, c + 1);
-                        const cl = at(r, c - 1);
-                        const d = at(r + 1, c);
-                        const e0 = cl === a && cl !== d && a !== b ? a : p;
-                        const e1 = a === b && a !== cl && b !== d ? b : p;
-                        const e2 = d === cl && d !== b && cl !== a ? cl : p;
-                        const e3 = b === d && b !== a && d !== cl ? d : p;
-                        if (e0)
-                            ctx.fillRect(gx + c * 2, gy + r * 2, 1, 1);
-                        if (e1)
-                            ctx.fillRect(gx + c * 2 + 1, gy + r * 2, 1, 1);
-                        if (e2)
-                            ctx.fillRect(gx + c * 2, gy + r * 2 + 1, 1, 1);
-                        if (e3)
-                            ctx.fillRect(gx + c * 2 + 1, gy + r * 2 + 1, 1, 1);
-                    }
-                }
-            };
-            const makeFill = (gy) => {
-                if (!isPhase2)
-                    return isRemaster ? '#ffe9b8' : '#f2e0b2';
-                const grad = ctx.createLinearGradient(0, gy, 0, gy + 16 * scale);
-                grad.addColorStop(0, '#fff4cf');
-                grad.addColorStop(0.5, '#f4d078');
-                grad.addColorStop(1, '#cf9435');
-                return grad;
-            };
-            for (let i = 0; i < text.length; i++) {
-                const ch = text[i];
-                if (ch === '\n') {
-                    cursorX = 12;
-                    cursorY += 20 * scale;
-                    continue;
-                }
-                const code = ch.charCodeAt(0);
-                if (code < 128) {
-                    const glyphHex = this.fontBitmaps.ascii_8x16[code] || this.fontBitmaps.ascii_8x16[32];
-                    if (cursorX + 8 * scale > maxW) {
-                        cursorX = 12;
-                        cursorY += 20 * scale;
-                    }
-                    if (isRemaster) {
-                        drawGlyphBits(glyphHex, 8, cursorX + 2, cursorY + 2, isPhase2 ? '#1a0c0c' : '#111622');
-                    }
-                    drawGlyphBits(glyphHex, 8, cursorX, cursorY, isPhase2 ? makeFill(cursorY) : isRemaster ? '#ffe9b8' : '#e6d2a0');
-                    cursorX += 9 * scale;
-                }
-                else {
-                    const glyphHex = this.fontBitmaps.hangul_16x16[ch];
-                    if (cursorX + 16 * scale > maxW) {
-                        cursorX = 12;
-                        cursorY += 20 * scale;
-                    }
-                    if (glyphHex) {
-                        if (isRemaster) {
-                            drawGlyphBits(glyphHex, 16, cursorX + 2, cursorY + 2, isPhase2 ? '#240d0d' : '#2b1212');
-                        }
-                        drawGlyphBits(glyphHex, 16, cursorX, cursorY, makeFill(cursorY));
-                    }
-                    else {
-                        ctx.fillStyle = '#d4a853';
-                        ctx.font = `${14 * scale}px "Malgun Gothic", sans-serif`;
-                        ctx.fillText(ch, cursorX, cursorY + 14 * scale);
-                    }
-                    cursorX += 17 * scale;
-                }
-                if (cursorY + 16 * scale > h)
-                    break;
-            }
+            renderKfontBitmapCanvas(kfontCanvas, text, mode, this.fontBitmaps, 2, '#07090e');
         };
         const renderDlgList = () => {
             const ch = Number(chSel.value);
@@ -849,6 +872,1045 @@ class SwordsManExplorer {
         modeSel.addEventListener('change', drawKfontText);
         renderDlgList();
         drawKfontText();
+    }
+    // -------------------------------------------------------------------------
+    // Tab 0: Playable Core Engine (Phase 3)
+    // -------------------------------------------------------------------------
+    setupGameEngine() {
+        var _a;
+        const world = this.worldData;
+        const canvas = document.getElementById('gameCanvas');
+        if (!world || !canvas)
+            return;
+        const chSel = document.getElementById('gameChapterSelect');
+        const evSel = document.getElementById('gameEventSelect');
+        const runEvBtn = document.getElementById('gameRunEventBtn');
+        const interactBtn = document.getElementById('gameInteractBtn');
+        const attackBtn = document.getElementById('gameAttackBtn');
+        const introBtn = document.getElementById('gameIntroBtn');
+        const skipIntroBtn = document.getElementById('gameSkipIntroBtn');
+        const bgmBtn = document.getElementById('gameBgmToggle');
+        const noClipChk = document.getElementById('gameNoClipToggle');
+        const coordBadge = document.getElementById('gameCoordBadge');
+        const renderBadge = document.getElementById('gameRenderBadge');
+        const swordBadge = document.getElementById('gameSwordBadge');
+        const statusBox = document.getElementById('gameStatusBox');
+        const invList = document.getElementById('gameInventoryList');
+        const objCountBadge = document.getElementById('gameObjCountBadge');
+        const objList = document.getElementById('gameObjList');
+        const logList = document.getElementById('gameLogList');
+        const dlgBox = document.getElementById('gameDialogueBox');
+        const dlgPortrait = document.getElementById('gameDlgPortrait');
+        const dlgSpeaker = document.getElementById('gameDlgSpeaker');
+        const dlgStepInfo = document.getElementById('gameDlgStepInfo');
+        const dlgText = document.getElementById('gameDlgText');
+        const dlgKfont = document.getElementById('gameDlgKfont');
+        const dlgNextBtn = document.getElementById('gameDlgNextBtn');
+        const dlgCloseBtn = document.getElementById('gameDlgCloseBtn');
+        const SCALE = 2;
+        const ctx = canvas.getContext('2d');
+        // Build O(1) per-chapter sprite rect maps
+        const spriteMaps = new Map();
+        for (const c of this.spritesIndex.chapters) {
+            const origMap = new Map();
+            for (const s of c.sprites)
+                origMap.set(s.id, s);
+            const hdCh = (_a = this.spritesIndexHd) === null || _a === void 0 ? void 0 : _a.chapters.find((h) => h.chapter === c.chapter);
+            const hdMap = new Map();
+            if (hdCh) {
+                for (const s of hdCh.sprites)
+                    hdMap.set(s.id, s);
+            }
+            spriteMaps.set(c.chapter, { orig: origMap, hd: hdMap });
+        }
+        const activeChapters = world.chapters.filter((c) => c.active);
+        chSel.innerHTML = activeChapters
+            .map((c) => `<option value="${c.chapter}">${c.title}</option>`)
+            .join('');
+        const chapterStates = new Map();
+        const inventory = new Map([
+            [0, { id: 0, name: '은전', qty: 100 }],
+            [5, { id: 5, name: '금창약', qty: 2 }],
+        ]);
+        const logs = [];
+        let curChapter = activeChapters[0] || world.chapters[0];
+        let curGrid = new Uint8Array(128 * 128);
+        let chapterEnteredAt = performance.now();
+        const player = {
+            x: curChapter.spawn.x,
+            y: curChapter.spawn.y,
+            hp: curChapter.spawn.hp,
+            maxHp: curChapter.spawn.max_hp,
+            mp: curChapter.spawn.mp,
+            maxMp: Math.max(200, curChapter.spawn.mp),
+            dir: curChapter.spawn.dir || 2,
+            swordName: '화산검법',
+            swordPower: 55,
+            exp: 0,
+            state: 'idle',
+            stateTimer: 0,
+            animTick: 0,
+            moveTarget: null,
+            hazardCooldown: 0,
+        };
+        const camera = { x: player.x, y: player.y };
+        let activeComd = null;
+        let introPlaying = false;
+        let introCancel = false;
+        let introImg = null;
+        let introCaption = '';
+        const pushLog = (msg) => {
+            const chTag = `CH${curChapter.chapter}`;
+            logs.unshift(`[${chTag}] ${msg}`);
+            if (logs.length > 40)
+                logs.pop();
+            logList.innerHTML = logs
+                .map((line) => `<div class="list-row" style="padding:5px 8px;font-size:0.78rem;">${line}</div>`)
+                .join('');
+        };
+        const playVoc = (kind) => {
+            var _a, _b;
+            const clips = ((_b = (_a = this.catalog) === null || _a === void 0 ? void 0 : _a.audio) === null || _b === void 0 ? void 0 : _b.voc) || [];
+            if (clips.length === 0)
+                return;
+            const idxMap = {
+                sword: 0,
+                hit: Math.min(2, clips.length - 1),
+                chest: Math.min(4, clips.length - 1),
+                talk: Math.min(6, clips.length - 1),
+                tele: Math.min(8, clips.length - 1),
+            };
+            const clip = clips[idxMap[kind]];
+            if (!clip)
+                return;
+            const base = this.isGlobalHdMode() ? REMASTER_BASE : ASSET_BASE;
+            const a = new Audio(base + clip.file);
+            a.volume = 0.42;
+            a.play().catch(() => { });
+        };
+        const syncBgm = (forcePlay) => {
+            var _a, _b, _c;
+            const on = forcePlay !== undefined ? forcePlay : bgmBtn.dataset.bgm === 'on';
+            bgmBtn.dataset.bgm = on ? 'on' : 'off';
+            bgmBtn.textContent = on ? '🎵 BGM: ON' : '🎵 BGM: OFF';
+            bgmBtn.classList.toggle('primary', on);
+            if (!on) {
+                (_a = this.gameBgmAudio) === null || _a === void 0 ? void 0 : _a.pause();
+                return;
+            }
+            const tracks = ((_c = (_b = this.catalog) === null || _b === void 0 ? void 0 : _b.audio) === null || _c === void 0 ? void 0 : _c.adlib) || [];
+            const bgmTrack = curChapter.chapter === 14
+                ? tracks.find((t) => t.id === 'd9_theme') || tracks[0]
+                : tracks[(curChapter.chapter + 2) % Math.max(1, tracks.length)];
+            if (!bgmTrack)
+                return;
+            const base = this.isGlobalHdMode() ? REMASTER_BASE : ASSET_BASE;
+            const src = base + bgmTrack.wav;
+            if (!this.gameBgmAudio) {
+                this.gameBgmAudio = new Audio();
+                this.gameBgmAudio.loop = true;
+                this.gameBgmAudio.volume = 0.35;
+            }
+            if (!this.gameBgmAudio.src.endsWith(src)) {
+                this.gameBgmAudio.src = src;
+            }
+            this.gameBgmAudio.play().catch(() => { });
+        };
+        const getMapGrid = (ch) => {
+            const cached = this.gameMapCache.get(ch.chapter);
+            if (cached)
+                return cached;
+            const arr = new Uint8Array(ch.map_w * ch.map_h);
+            if (ch.map_b64) {
+                const bin = atob(ch.map_b64);
+                const len = Math.min(arr.length, bin.length);
+                for (let i = 0; i < len; i++)
+                    arr[i] = bin.charCodeAt(i);
+            }
+            this.gameMapCache.set(ch.chapter, arr);
+            return arr;
+        };
+        const ensureSheets = (ch) => {
+            if (!this.gameSheetOrigCache.has(ch.chapter)) {
+                loadImage(ch.sheet, ASSET_BASE)
+                    .then((img) => {
+                    this.gameSheetOrigCache.set(ch.chapter, img);
+                })
+                    .catch(() => { });
+            }
+            if (!this.gameSheetHdCache.has(ch.chapter)) {
+                loadImage(ch.sheet, REMASTER_BASE)
+                    .then((img) => {
+                    this.gameSheetHdCache.set(ch.chapter, img);
+                })
+                    .catch(() => { });
+            }
+        };
+        const worldToIso = (gx, gy) => ({
+            ix: (gx - gy) * 16,
+            iy: (gx + gy) * 8,
+        });
+        const isoToWorld = (ix, iy) => ({
+            gx: (ix / 16 + iy / 8) * 0.5,
+            gy: (iy / 8 - ix / 16) * 0.5,
+        });
+        const isWalkable = (nx, ny) => {
+            if (nx < 0.5 || ny < 0.5 || nx >= curChapter.map_w - 0.5 || ny >= curChapter.map_h - 0.5) {
+                return false;
+            }
+            if (noClipChk.checked)
+                return true;
+            const gx = Math.floor(nx);
+            const gy = Math.floor(ny);
+            const tid = curGrid[gy * curChapter.map_w + gx] || 0;
+            const ter = curChapter.ter[tid];
+            return !ter || ter.blocking === 0;
+        };
+        const getCurState = () => {
+            let st = chapterStates.get(curChapter.chapter);
+            if (!st) {
+                st = {
+                    chars: curChapter.chars.map((c) => ({ ...c, alive: true, hitFlash: 0 })),
+                    objs: curChapter.objs.map((o) => ({
+                        ...o,
+                        opened: false,
+                        unlocked: o.kind !== 'portal' || curChapter.chapter !== 0,
+                    })),
+                };
+                chapterStates.set(curChapter.chapter, st);
+            }
+            return st;
+        };
+        const updateStatusUi = () => {
+            const hpPct = Math.max(0, Math.min(100, Math.round((player.hp / Math.max(1, player.maxHp)) * 100)));
+            const mpPct = Math.max(0, Math.min(100, Math.round((player.mp / Math.max(1, player.maxMp)) * 100)));
+            swordBadge.textContent = player.swordName;
+            statusBox.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong>영호충 (令狐沖)</strong>
+          <span class="mono">경험치 ${player.exp} · 공격력 ${player.swordPower}</span>
+        </div>
+        <div style="font-size:0.78rem;margin-top:6px;">체력 HP: ${player.hp} / ${player.maxHp}</div>
+        <div class="hp-bar-track"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
+        <div style="font-size:0.78rem;">내공 MP: ${player.mp} / ${player.maxMp}</div>
+        <div class="hp-bar-track" style="margin-bottom:2px;"><div class="mp-bar-fill" style="width:${mpPct}%"></div></div>
+      `;
+            const itemsArr = Array.from(inventory.values());
+            invList.innerHTML = itemsArr
+                .map((it) => `<div class="list-row" style="padding:5px 8px;font-size:0.8rem;">
+              <span>${it.name}</span>
+              <span class="badge gold">×${it.qty}</span>
+            </div>`)
+                .join('');
+        };
+        const updateObjsUi = () => {
+            const st = getCurState();
+            const rows = [];
+            for (const ch of st.chars) {
+                if (!ch.alive)
+                    continue;
+                const dist = Math.hypot(ch.x - player.x, ch.y - player.y);
+                const tag = ch.is_boss ? '<span class="badge gold">보스</span>' : '<span class="badge">적</span>';
+                rows.push(`<div class="list-row clickable obj-row" data-type="char" data-slot="${ch.slot}">
+            <div>${tag} ${ch.name} <span class="mono" style="color:var(--muted);">HP ${ch.hp}/${ch.max_hp}</span></div>
+            <span class="mono">${dist.toFixed(1)}t</span>
+          </div>`);
+            }
+            for (const obj of st.objs) {
+                const dist = Math.hypot(obj.x - player.x, obj.y - player.y);
+                const badgeText = obj.kind === 'chest'
+                    ? obj.opened
+                        ? '빈상자'
+                        : '상자'
+                    : obj.kind === 'portal'
+                        ? '포탈'
+                        : obj.kind === 'npc'
+                            ? '인물'
+                            : '이벤트';
+                rows.push(`<div class="list-row clickable obj-row" data-type="obj" data-slot="${obj.slot}">
+            <div><span class="badge">${badgeText}</span> ${obj.label}</div>
+            <span class="mono">${dist.toFixed(1)}t</span>
+          </div>`);
+            }
+            objCountBadge.textContent = String(st.chars.filter((c) => c.alive).length + st.objs.length);
+            objList.innerHTML =
+                rows.join('') || '<div class="hint" style="padding:8px;">배치된 인물/오브젝트 없음</div>';
+        };
+        const renderDlgStep = () => {
+            var _a;
+            if (!activeComd) {
+                dlgBox.hidden = true;
+                return;
+            }
+            const step = activeComd.saySteps[activeComd.sayCursor];
+            if (!step) {
+                const tp = activeComd.pendingTeleport;
+                activeComd = null;
+                dlgBox.hidden = true;
+                if (tp)
+                    executeTeleport(tp);
+                return;
+            }
+            dlgBox.hidden = false;
+            const fid = step.face_id !== undefined && step.face_id !== null ? step.face_id : (_a = activeComd.curFace) !== null && _a !== void 0 ? _a : 4;
+            const pad = String(Math.max(0, Math.min(149, fid))).padStart(3, '0');
+            const faceBase = this.isGlobalHdMode() ? REMASTER_BASE : ASSET_BASE;
+            dlgPortrait.src = `${faceBase}faces/face_${pad}.png`;
+            dlgSpeaker.textContent = step.speaker || activeComd.curSpeaker;
+            dlgStepInfo.textContent = `${activeComd.comd.name} (${activeComd.sayCursor + 1}/${activeComd.saySteps.length})`;
+            const txt = step.text || '';
+            dlgText.textContent = txt;
+            dlgNextBtn.textContent =
+                activeComd.sayCursor + 1 < activeComd.saySteps.length
+                    ? '다음 ▶'
+                    : activeComd.pendingTeleport
+                        ? '다음 지역 ▶'
+                        : '완료 ✓';
+            const kScale = txt.length > 26 || txt.includes('\n') ? 1 : 2;
+            const kMode = this.isGlobalHdMode() ? 'phase2' : 'dos';
+            renderKfontBitmapCanvas(dlgKfont, txt, kMode, this.fontBitmaps, kScale, '#080b11');
+        };
+        const addInventoryItem = (itemId, qty) => {
+            if (itemId < 0 || itemId >= curChapter.items.length)
+                return;
+            const itemDef = curChapter.items[itemId];
+            const existing = inventory.get(itemId);
+            if (existing) {
+                existing.qty += qty;
+            }
+            else {
+                inventory.set(itemId, { id: itemId, name: itemDef.name, qty });
+            }
+            if (itemDef.name.includes('검법')) {
+                player.swordName = itemDef.name;
+                player.swordPower = Math.max(player.swordPower, itemDef.name === '벽사검법' ? 95 : 75);
+                pushLog(`비급 습득! 기본 무공이 [${itemDef.name}] (공격력 ${player.swordPower})로 상승!`);
+            }
+            else if (['대보환', '금창약', '웅담환', '대환단', '천향단속교'].includes(itemDef.name)) {
+                player.hp = Math.min(player.maxHp, player.hp + 120);
+                player.mp = Math.min(player.maxMp, player.mp + 60);
+            }
+            updateStatusUi();
+        };
+        const executeTeleport = (step) => {
+            const targetCh = step.target_chapter !== undefined && step.target_chapter !== null ? step.target_chapter : curChapter.chapter;
+            const tx = typeof step.x === 'number' && step.x > 0 ? step.x : undefined;
+            const ty = typeof step.y === 'number' && step.y > 0 ? step.y : undefined;
+            playVoc('tele');
+            pushLog(`이동: Chapter ${targetCh} (${tx !== null && tx !== void 0 ? tx : '기본'}${ty !== undefined ? `, ${ty}` : ''})`);
+            loadChapter(targetCh, tx !== undefined && ty !== undefined ? { x: tx, y: ty } : undefined);
+        };
+        const runComd = (comdId) => {
+            const comd = curChapter.comds[comdId];
+            if (!comd)
+                return;
+            playVoc('talk');
+            const st = getCurState();
+            const saySteps = [];
+            let curFace = 4;
+            let curSpeaker = '영호충';
+            let pendingTeleport = null;
+            for (const step of comd.steps) {
+                if (step.op === 'face' && step.face_id !== undefined && step.face_id !== null) {
+                    curFace = step.face_id;
+                    curSpeaker = step.speaker || `인물 #${curFace}`;
+                }
+                else if (step.op === 'say') {
+                    saySteps.push(step);
+                }
+                else if (step.op === 'set_obj') {
+                    if (step.obj_slot !== undefined && step.obj_slot !== null) {
+                        const targetObj = st.objs.find((o) => o.slot === step.obj_slot);
+                        if (targetObj) {
+                            targetObj.unlocked = true;
+                            pushLog(`[이벤트] ${targetObj.label} 활성화됨`);
+                        }
+                    }
+                }
+                else if (step.op === 'give_item' && typeof step.item_id === 'number') {
+                    if (step.item_id >= 0 && step.item_id < curChapter.items.length) {
+                        addInventoryItem(step.item_id, 1);
+                        pushLog(`획득: ${curChapter.items[step.item_id].name}`);
+                    }
+                    else {
+                        player.exp += step.item_id;
+                        updateStatusUi();
+                    }
+                }
+                else if (step.op === 'teleport') {
+                    pendingTeleport = step;
+                }
+            }
+            if (saySteps.length > 0) {
+                activeComd = {
+                    comd,
+                    saySteps,
+                    sayCursor: 0,
+                    curFace,
+                    curSpeaker,
+                    pendingTeleport,
+                };
+                renderDlgStep();
+                updateObjsUi();
+                return;
+            }
+            if (pendingTeleport) {
+                executeTeleport(pendingTeleport);
+                return;
+            }
+            pushLog(`이벤트 실행: ${comd.name}`);
+            updateObjsUi();
+        };
+        const interactWithObj = (obj) => {
+            if (obj.kind === 'chest') {
+                if (!obj.opened) {
+                    obj.opened = true;
+                    playVoc('chest');
+                    const qty = Math.max(1, obj.item_qty || 1);
+                    const itemDef = curChapter.items[obj.item_id];
+                    addInventoryItem(obj.item_id, qty);
+                    pushLog(`보물상자 획득: ${itemDef ? itemDef.name : `아이템 #${obj.item_id}`} ×${qty}`);
+                    updateObjsUi();
+                    return;
+                }
+                pushLog('상자는 이미 비어 있습니다.');
+            }
+            runComd(obj.comd_id);
+        };
+        const interactNearest = () => {
+            if (activeComd) {
+                activeComd.sayCursor += 1;
+                renderDlgStep();
+                return;
+            }
+            const st = getCurState();
+            let bestObj = null;
+            let bestDist = 3.6;
+            for (const obj of st.objs) {
+                const d = Math.hypot(obj.x - player.x, obj.y - player.y);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestObj = obj;
+                }
+            }
+            if (!bestObj) {
+                pushLog('주변 3.6타일 이내에 상호작용할 대상이 없습니다. (목록에서 대상을 클릭해보세요)');
+                return;
+            }
+            interactWithObj(bestObj);
+        };
+        const performAttack = () => {
+            player.state = 'attack';
+            player.stateTimer = 0.36;
+            player.animTick = 0;
+            playVoc('sword');
+            const st = getCurState();
+            let target = null;
+            let bestDist = 3.2;
+            for (const ch of st.chars) {
+                if (!ch.alive)
+                    continue;
+                const d = Math.hypot(ch.x - player.x, ch.y - player.y);
+                if (d < bestDist) {
+                    bestDist = d;
+                    target = ch;
+                }
+            }
+            if (!target) {
+                pushLog(`허공에 [${player.swordName}] 검기를 펼쳤습니다.`);
+                return;
+            }
+            // Face target
+            const dx = target.x - player.x;
+            const dy = target.y - player.y;
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                player.dir = dx >= 0 ? 1 : 3;
+            }
+            else {
+                player.dir = dy >= 0 ? 2 : 0;
+            }
+            const dmg = player.swordPower + Math.floor(Math.random() * 16);
+            target.hp = Math.max(0, target.hp - dmg);
+            target.hitFlash = 0.25;
+            playVoc('hit');
+            if (target.hp <= 0) {
+                target.alive = false;
+                const bonus = target.is_boss ? 250 : 60;
+                player.exp += bonus;
+                pushLog(`${target.name} 격파! (+${bonus} EXP)`);
+                updateStatusUi();
+                updateObjsUi();
+                if (target.defeat_comd !== null && curChapter.comds[target.defeat_comd]) {
+                    runComd(target.defeat_comd);
+                }
+                return;
+            }
+            const counterDmg = Math.max(5, Math.min(25, Math.floor(target.attack * 0.4)));
+            player.hp = Math.max(10, player.hp - counterDmg);
+            pushLog(`${target.name}에게 ${dmg} 피해! (남은 HP ${target.hp}/${target.max_hp}, 반격 -${counterDmg})`);
+            updateStatusUi();
+            updateObjsUi();
+        };
+        const loadChapter = (chNum, spawnOverride) => {
+            const target = world.chapters.find((c) => c.chapter === chNum && c.active);
+            if (!target)
+                return;
+            curChapter = target;
+            curGrid = getMapGrid(curChapter);
+            ensureSheets(curChapter);
+            chapterEnteredAt = performance.now();
+            player.x = spawnOverride ? spawnOverride.x : curChapter.spawn.x;
+            player.y = spawnOverride ? spawnOverride.y : curChapter.spawn.y;
+            player.moveTarget = null;
+            camera.x = player.x;
+            camera.y = player.y;
+            activeComd = null;
+            dlgBox.hidden = true;
+            chSel.value = String(curChapter.chapter);
+            const runnableComds = curChapter.comds.filter((c) => c.steps.length > 0 || c.id >= 15);
+            evSel.innerHTML = runnableComds
+                .map((c) => `<option value="${c.id}">#${c.id} ${c.name}${c.steps.some((s) => s.op === 'say') ? ` (대사 ${c.steps.filter((s) => s.op === 'say').length})` : ''}</option>`)
+                .join('');
+            coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
+            updateStatusUi();
+            updateObjsUi();
+            syncBgm();
+            pushLog(`${curChapter.title} 입장`);
+        };
+        const stopIntro = () => {
+            var _a;
+            introCancel = true;
+            introPlaying = false;
+            skipIntroBtn.hidden = true;
+            (_a = this.gameIntroAudio) === null || _a === void 0 ? void 0 : _a.pause();
+        };
+        const startIntro = async () => {
+            if (introPlaying) {
+                stopIntro();
+                return;
+            }
+            introPlaying = true;
+            introCancel = false;
+            skipIntroBtn.hidden = false;
+            const base = this.isGlobalHdMode() ? REMASTER_BASE : ASSET_BASE;
+            if (!this.gameIntroAudio) {
+                this.gameIntroAudio = new Audio();
+                this.gameIntroAudio.volume = 0.45;
+            }
+            this.gameIntroAudio.src = base + world.intro.tit_music;
+            this.gameIntroAudio.currentTime = 0;
+            this.gameIntroAudio.play().catch(() => { });
+            const showSeqImage = async (relPath, ms, caption) => {
+                if (introCancel)
+                    return;
+                try {
+                    introImg = await loadImage(relPath, base);
+                    introCaption = caption;
+                }
+                catch {
+                    introImg = null;
+                }
+                await new Promise((res) => window.setTimeout(res, ms));
+            };
+            pushLog('오프닝 시퀀스 재생: GT 로고 → TIT 타이틀');
+            for (let i = 0; i < world.intro.gt_screens.length; i++) {
+                if (introCancel)
+                    break;
+                await showSeqImage(world.intro.gt_screens[i], 1400, `SOFT-WORLD 1993 · INTRO ${i + 1}/2`);
+            }
+            const titImgs = await Promise.all(world.intro.tit_frames.map((f) => loadImage(f, base).catch(() => null)));
+            for (let i = 0; i < titImgs.length; i++) {
+                if (introCancel)
+                    break;
+                introImg = titImgs[i];
+                introCaption = `소오강호 (동방불패 · SwordsMan) TITLE ${i + 1}/${titImgs.length}`;
+                await new Promise((res) => window.setTimeout(res, 95));
+            }
+            stopIntro();
+        };
+        const drawSprite = (sprId, wx, wy) => {
+            if (!sprId)
+                return;
+            const pair = spriteMaps.get(curChapter.chapter);
+            if (!pair)
+                return;
+            const origSp = pair.orig.get(sprId);
+            if (!origSp || origSp.orig_x >= 48 || origSp.w >= 120)
+                return;
+            const isHd = this.isGlobalHdMode();
+            const hdSp = pair.hd.get(sprId);
+            const hdImg = this.gameSheetHdCache.get(curChapter.chapter);
+            const origImg = this.gameSheetOrigCache.get(curChapter.chapter);
+            const { ix, iy } = worldToIso(wx, wy);
+            const camIso = worldToIso(camera.x, camera.y);
+            const drawX = Math.round(canvas.width / 2 + (ix - camIso.ix - 16 + origSp.orig_x) * SCALE);
+            const drawY = Math.round(canvas.height / 2 + (iy - camIso.iy - 48 + origSp.orig_y) * SCALE);
+            if (isHd && hdImg && hdImg.complete && hdSp) {
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(hdImg, hdSp.sx, hdSp.sy, hdSp.w, hdSp.h, drawX, drawY, hdSp.w, hdSp.h);
+            }
+            else if (origImg && origImg.complete) {
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(origImg, origSp.sx, origSp.sy, origSp.w, origSp.h, drawX, drawY, origSp.w * SCALE, origSp.h * SCALE);
+            }
+        };
+        const pickPhaseSprite = (phaseIdx, dir, action, tick) => {
+            const ph = curChapter.phases[phaseIdx] || curChapter.phases[0];
+            if (!ph || ph.frames.length === 0)
+                return null;
+            const pair = spriteMaps.get(curChapter.chapter);
+            const base = (dir % 4) * ph.stride;
+            const isValidFrame = (id) => {
+                if (!id || !pair)
+                    return false;
+                const sp = pair.orig.get(id);
+                return Boolean(sp && sp.orig_x < 48 && sp.w < 120);
+            };
+            const offsets = action === 'attack'
+                ? [50, 51, 52, 53, 54, 55, 16, 17, 18]
+                : action === 'walk'
+                    ? [4, 5, 6, 7, 0, 1]
+                    : [0, 1, 2, 3];
+            const validPool = [];
+            for (const off of offsets) {
+                const fid = ph.frames[base + off];
+                if (fid && isValidFrame(fid))
+                    validPool.push(fid);
+            }
+            if (validPool.length > 0) {
+                return validPool[tick % validPool.length];
+            }
+            for (let i = 0; i < ph.frames.length; i++) {
+                const fid = ph.frames[(base + i) % ph.frames.length];
+                if (fid && isValidFrame(fid))
+                    return fid;
+            }
+            return null;
+        };
+        const renderFrame = () => {
+            const W = canvas.width;
+            const H = canvas.height;
+            const isHd = this.isGlobalHdMode();
+            renderBadge.textContent = isHd ? '✨ 2× EPX HD' : '🕹 DOS 1× 픽셀';
+            ctx.fillStyle = '#070a0f';
+            ctx.fillRect(0, 0, W, H);
+            if (introPlaying && introImg && introImg.complete) {
+                ctx.imageSmoothingEnabled = isHd;
+                const scale = Math.min(W / introImg.width, H / introImg.height);
+                const dw = Math.round(introImg.width * scale);
+                const dh = Math.round(introImg.height * scale);
+                ctx.drawImage(introImg, Math.round((W - dw) / 2), Math.round((H - dh) / 2), dw, dh);
+                ctx.fillStyle = 'rgba(0,0,0,0.62)';
+                ctx.fillRect(14, H - 38, W - 28, 26);
+                ctx.fillStyle = '#f6e7c1';
+                ctx.font = '13px "Malgun Gothic", sans-serif';
+                ctx.fillText(introCaption, 24, H - 20);
+                return;
+            }
+            const st = getCurState();
+            const camIso = worldToIso(camera.x, camera.y);
+            const viewMinSum = Math.floor(camera.x + camera.y - 22);
+            const viewMaxSum = Math.ceil(camera.x + camera.y + 22);
+            const viewMinDiff = Math.floor(camera.x - camera.y - 20);
+            const viewMaxDiff = Math.ceil(camera.x - camera.y + 20);
+            // 1. Ground flat tiles pass
+            const tallItems = [];
+            for (let sum = viewMinSum; sum <= viewMaxSum; sum++) {
+                for (let gx = 0; gx < curChapter.map_w; gx++) {
+                    const gy = sum - gx;
+                    if (gy < 0 || gy >= curChapter.map_h)
+                        continue;
+                    const diff = gx - gy;
+                    if (diff < viewMinDiff || diff > viewMaxDiff)
+                        continue;
+                    const tid = curGrid[gy * curChapter.map_w + gx] || 0;
+                    const ter = curChapter.ter[tid];
+                    if (!ter || !ter.spr_id)
+                        continue;
+                    if (ter.tall) {
+                        // Draw base ground stone beneath walls/trees so no dark voids show at wall base
+                        const baseGround = curChapter.ter[0];
+                        if (baseGround && baseGround.spr_id) {
+                            drawSprite(baseGround.spr_id, gx, gy);
+                        }
+                        tallItems.push({
+                            depth: gx + gy,
+                            draw: () => drawSprite(ter.spr_id, gx, gy),
+                        });
+                    }
+                    else {
+                        drawSprite(ter.spr_id, gx, gy);
+                    }
+                }
+            }
+            // Ground tile highlight under moveTarget & player
+            if (player.moveTarget) {
+                const ti = worldToIso(player.moveTarget.x, player.moveTarget.y);
+                const tx = W / 2 + (ti.ix - camIso.ix) * SCALE;
+                const ty = H / 2 + (ti.iy - camIso.iy) * SCALE;
+                ctx.strokeStyle = 'rgba(61, 168, 142, 0.85)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(tx, ty - 14);
+                ctx.lineTo(tx + 28, ty);
+                ctx.lineTo(tx, ty + 14);
+                ctx.lineTo(tx - 28, ty);
+                ctx.closePath();
+                ctx.stroke();
+            }
+            // 2. Depth-sorted objects, enemies, NPCs, and Player
+            for (const obj of st.objs) {
+                tallItems.push({
+                    depth: obj.x + obj.y + 0.08,
+                    draw: () => {
+                        const oIso = worldToIso(obj.x, obj.y);
+                        const sx = W / 2 + (oIso.ix - camIso.ix) * SCALE;
+                        const sy = H / 2 + (oIso.iy - camIso.iy) * SCALE;
+                        if (obj.kind === 'portal') {
+                            const pulse = 18 + Math.sin(performance.now() * 0.005) * 4;
+                            ctx.fillStyle = obj.unlocked ? 'rgba(61, 168, 142, 0.25)' : 'rgba(212, 168, 83, 0.16)';
+                            ctx.beginPath();
+                            ctx.ellipse(sx, sy, pulse * 1.4, pulse * 0.7, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.strokeStyle = obj.unlocked ? '#3da88e' : '#d4a853';
+                            ctx.lineWidth = 2;
+                            ctx.stroke();
+                            ctx.fillStyle = '#e7f9f2';
+                            ctx.font = 'bold 11px "Malgun Gothic", sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(obj.label, sx, sy - 14);
+                            ctx.textAlign = 'left';
+                        }
+                        else if (obj.spr_id) {
+                            drawSprite(obj.spr_id, obj.x, obj.y);
+                            if (obj.kind === 'chest' && !obj.opened) {
+                                ctx.fillStyle = 'rgba(212, 168, 83, 0.9)';
+                                ctx.fillRect(sx - 3, sy - 46, 6, 6);
+                            }
+                        }
+                        else {
+                            ctx.fillStyle = 'rgba(212, 168, 83, 0.35)';
+                            ctx.beginPath();
+                            ctx.arc(sx, sy - 10, 8, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    },
+                });
+            }
+            for (const ch of st.chars) {
+                if (!ch.alive)
+                    continue;
+                tallItems.push({
+                    depth: ch.x + ch.y + 0.15,
+                    draw: () => {
+                        const cIso = worldToIso(ch.x, ch.y);
+                        const sx = W / 2 + (cIso.ix - camIso.ix) * SCALE;
+                        const sy = H / 2 + (cIso.iy - camIso.iy) * SCALE;
+                        const sid = pickPhaseSprite(ch.phase_idx, ch.dir, 'idle', Math.floor(performance.now() / 320));
+                        drawSprite(sid, ch.x, ch.y);
+                        if (ch.hitFlash > 0) {
+                            ctx.fillStyle = 'rgba(255, 80, 60, 0.45)';
+                            ctx.beginPath();
+                            ctx.arc(sx, sy - 24, 20, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        // Mini HP bar above enemy
+                        const bw = 42;
+                        const ratio = Math.max(0, Math.min(1, ch.hp / Math.max(1, ch.max_hp)));
+                        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                        ctx.fillRect(sx - bw / 2, sy - 64, bw, 5);
+                        ctx.fillStyle = ch.is_boss ? '#f4d078' : '#e05252';
+                        ctx.fillRect(sx - bw / 2 + 1, sy - 63, (bw - 2) * ratio, 3);
+                        ctx.fillStyle = ch.is_boss ? '#fff4cf' : '#d8dee9';
+                        ctx.font = '11px "Malgun Gothic", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(ch.name, sx, sy - 69);
+                        ctx.textAlign = 'left';
+                    },
+                });
+            }
+            tallItems.push({
+                depth: player.x + player.y + 0.2,
+                draw: () => {
+                    const pIso = worldToIso(player.x, player.y);
+                    const sx = W / 2 + (pIso.ix - camIso.ix) * SCALE;
+                    const sy = H / 2 + (pIso.iy - camIso.iy) * SCALE;
+                    // Subtle hero ground halo
+                    ctx.strokeStyle = 'rgba(212, 168, 83, 0.65)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.ellipse(sx, sy + 2, 16, 8, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                    const sid = pickPhaseSprite(0, player.dir, player.state, player.animTick);
+                    drawSprite(sid, player.x, player.y);
+                    if (player.state === 'attack') {
+                        ctx.strokeStyle = 'rgba(255, 224, 130, 0.9)';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.arc(sx, sy - 22, 34, -0.6, Math.PI * 0.95);
+                        ctx.stroke();
+                    }
+                },
+            });
+            tallItems.sort((a, b) => a.depth - b.depth);
+            for (const item of tallItems)
+                item.draw();
+            // Top-left chapter HUD pill
+            ctx.fillStyle = 'rgba(11, 14, 20, 0.78)';
+            ctx.fillRect(10, 10, 320, 26);
+            ctx.strokeStyle = 'rgba(212, 168, 83, 0.45)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(10, 10, 320, 26);
+            ctx.fillStyle = '#f6e7c1';
+            ctx.font = '12px "Malgun Gothic", sans-serif';
+            ctx.fillText(curChapter.title, 18, 27);
+        };
+        const keysDown = new Set();
+        const moveStep = (dx, dy, dt) => {
+            const speed = 6.2;
+            const nx = player.x + dx * speed * dt;
+            const ny = player.y + dy * speed * dt;
+            let moved = false;
+            if (isWalkable(nx, ny)) {
+                player.x = nx;
+                player.y = ny;
+                moved = true;
+            }
+            else if (isWalkable(nx, player.y)) {
+                player.x = nx;
+                moved = true;
+            }
+            else if (isWalkable(player.x, ny)) {
+                player.y = ny;
+                moved = true;
+            }
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                player.dir = dx >= 0 ? 1 : 3;
+            }
+            else {
+                player.dir = dy >= 0 ? 2 : 0;
+            }
+            if (moved) {
+                coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
+                const gx = Math.floor(player.x);
+                const gy = Math.floor(player.y);
+                const tid = curGrid[gy * curChapter.map_w + gx] || 0;
+                const ter = curChapter.ter[tid];
+                if (ter && ter.damage > 0 && player.hazardCooldown <= 0) {
+                    player.hp = Math.max(5, player.hp - 12);
+                    player.hazardCooldown = 0.8;
+                    pushLog('함정(STING)에 밟혀 -12 HP!');
+                    updateStatusUi();
+                }
+                // Check unlocked portal proximity after 1.5s spawn grace
+                if (performance.now() - chapterEnteredAt > 1500) {
+                    const portal = getCurState().objs.find((o) => o.kind === 'portal' && o.unlocked && Math.hypot(o.x - player.x, o.y - player.y) < 0.9);
+                    if (portal)
+                        runComd(portal.comd_id);
+                }
+            }
+            return moved;
+        };
+        let lastTs = performance.now();
+        let accumAnim = 0;
+        const tickLoop = (now) => {
+            var _a;
+            const dt = Math.min(0.05, (now - lastTs) / 1000);
+            lastTs = now;
+            const tabActive = (_a = document.getElementById('tab-play')) === null || _a === void 0 ? void 0 : _a.classList.contains('active');
+            if (tabActive) {
+                player.hazardCooldown = Math.max(0, player.hazardCooldown - dt);
+                for (const ch of getCurState().chars) {
+                    if (ch.hitFlash > 0)
+                        ch.hitFlash = Math.max(0, ch.hitFlash - dt);
+                }
+                if (player.state === 'attack') {
+                    player.stateTimer -= dt;
+                    if (player.stateTimer <= 0)
+                        player.state = 'idle';
+                }
+                if (!introPlaying && !activeComd) {
+                    let kx = 0;
+                    let ky = 0;
+                    if (keysDown.has('w') || keysDown.has('arrowup')) {
+                        kx -= 1;
+                        ky -= 1;
+                    }
+                    if (keysDown.has('s') || keysDown.has('arrowdown')) {
+                        kx += 1;
+                        ky += 1;
+                    }
+                    if (keysDown.has('a') || keysDown.has('arrowleft')) {
+                        kx -= 1;
+                        ky += 1;
+                    }
+                    if (keysDown.has('d') || keysDown.has('arrowright')) {
+                        kx += 1;
+                        ky -= 1;
+                    }
+                    if (kx !== 0 || ky !== 0) {
+                        player.moveTarget = null;
+                        const len = Math.hypot(kx, ky);
+                        moveStep(kx / len, ky / len, dt);
+                        if (player.state !== 'attack')
+                            player.state = 'walk';
+                    }
+                    else if (player.moveTarget) {
+                        const dx = player.moveTarget.x - player.x;
+                        const dy = player.moveTarget.y - player.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < 0.35) {
+                            const pend = player.moveTarget.pendingObj;
+                            player.moveTarget = null;
+                            if (player.state !== 'attack')
+                                player.state = 'idle';
+                            if (pend)
+                                interactWithObj(pend);
+                            updateObjsUi();
+                        }
+                        else {
+                            const moved = moveStep(dx / dist, dy / dist, dt);
+                            if (player.state !== 'attack')
+                                player.state = moved ? 'walk' : 'idle';
+                            if (!moved) {
+                                player.moveTarget = null;
+                                updateObjsUi();
+                            }
+                        }
+                    }
+                    else if (player.state === 'walk') {
+                        player.state = 'idle';
+                    }
+                }
+                camera.x += (player.x - camera.x) * Math.min(1, dt * 10);
+                camera.y += (player.y - camera.y) * Math.min(1, dt * 10);
+                accumAnim += dt;
+                if (accumAnim >= 0.14) {
+                    accumAnim = 0;
+                    player.animTick += 1;
+                }
+                renderFrame();
+            }
+            window.requestAnimationFrame(tickLoop);
+        };
+        // UI event wiring
+        chSel.addEventListener('change', () => loadChapter(Number(chSel.value)));
+        runEvBtn.addEventListener('click', () => {
+            const cid = Number(evSel.value);
+            if (!Number.isNaN(cid))
+                runComd(cid);
+        });
+        interactBtn.addEventListener('click', interactNearest);
+        attackBtn.addEventListener('click', performAttack);
+        introBtn.addEventListener('click', () => startIntro());
+        skipIntroBtn.addEventListener('click', stopIntro);
+        bgmBtn.addEventListener('click', () => syncBgm(bgmBtn.dataset.bgm !== 'on'));
+        dlgNextBtn.addEventListener('click', () => {
+            if (!activeComd)
+                return;
+            activeComd.sayCursor += 1;
+            renderDlgStep();
+        });
+        dlgCloseBtn.addEventListener('click', () => {
+            activeComd = null;
+            dlgBox.hidden = true;
+        });
+        canvas.addEventListener('click', (e) => {
+            if (introPlaying)
+                return;
+            const rect = canvas.getBoundingClientRect();
+            const cx = ((e.clientX - rect.left) / rect.width) * canvas.width;
+            const cy = ((e.clientY - rect.top) / rect.height) * canvas.height;
+            const camIso = worldToIso(camera.x, camera.y);
+            const ix = camIso.ix + (cx - canvas.width / 2) / SCALE;
+            const iy = camIso.iy + (cy - canvas.height / 2) / SCALE;
+            const target = isoToWorld(ix, iy);
+            const gx = Math.max(1, Math.min(curChapter.map_w - 2, target.gx));
+            const gy = Math.max(1, Math.min(curChapter.map_h - 2, target.gy));
+            // Check if click landed near an object
+            const st = getCurState();
+            const hitObj = st.objs.find((o) => Math.hypot(o.x - gx, o.y - gy) < 1.35) || null;
+            if (hitObj && Math.hypot(hitObj.x - player.x, hitObj.y - player.y) < 2.8) {
+                interactWithObj(hitObj);
+                return;
+            }
+            player.moveTarget = { x: gx, y: gy, pendingObj: hitObj };
+        });
+        Array.from(document.querySelectorAll('.game-move-btn')).forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const el = btn;
+                const dx = Number(el.dataset.dx || 0);
+                const dy = Number(el.dataset.dy || 0);
+                const len = Math.hypot(dx, dy) || 1;
+                moveStep(dx / len, dy / len, 0.16);
+                player.animTick += 1;
+                updateObjsUi();
+            });
+        });
+        objList.addEventListener('click', (e) => {
+            const row = e.target.closest('.obj-row');
+            if (!row)
+                return;
+            const kind = row.dataset.type;
+            const slot = Number(row.dataset.slot);
+            const st = getCurState();
+            if (kind === 'char') {
+                const ch = st.chars.find((c) => c.slot === slot && c.alive);
+                if (!ch)
+                    return;
+                player.x = Math.min(curChapter.map_w - 2, ch.x + 1.1);
+                player.y = ch.y;
+                player.moveTarget = null;
+                camera.x = player.x;
+                camera.y = player.y;
+                coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
+                updateObjsUi();
+                pushLog(`${ch.name} 앞으로 이동 (Space/공격으로 전투)`);
+                return;
+            }
+            const obj = st.objs.find((o) => o.slot === slot);
+            if (!obj)
+                return;
+            player.x = obj.kind === 'portal' ? obj.x : Math.max(1, obj.x - 1.1);
+            player.y = obj.y;
+            player.moveTarget = null;
+            camera.x = player.x;
+            camera.y = player.y;
+            coordBadge.textContent = `CH${curChapter.chapter} · (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`;
+            interactWithObj(obj);
+            updateObjsUi();
+        });
+        window.addEventListener('keydown', (e) => {
+            var _a, _b;
+            if (!((_a = document.getElementById('tab-play')) === null || _a === void 0 ? void 0 : _a.classList.contains('active')))
+                return;
+            const activeTag = (_b = document.activeElement) === null || _b === void 0 ? void 0 : _b.tagName;
+            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT')
+                return;
+            const k = e.key.toLowerCase();
+            if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) {
+                e.preventDefault();
+            }
+            if (k === ' ') {
+                performAttack();
+                return;
+            }
+            if (k === 'e' || k === 'enter') {
+                interactNearest();
+                return;
+            }
+            keysDown.add(k);
+        });
+        window.addEventListener('keyup', (e) => {
+            keysDown.delete(e.key.toLowerCase());
+        });
+        this.gameOnModeChange = () => {
+            renderDlgStep();
+            if (bgmBtn.dataset.bgm === 'on')
+                syncBgm(true);
+        };
+        loadChapter(0);
+        window.requestAnimationFrame(tickLoop);
     }
 }
 window.addEventListener('DOMContentLoaded', () => {

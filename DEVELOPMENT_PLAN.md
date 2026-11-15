@@ -68,10 +68,11 @@
   * [x] `tools/remaster_assets.py` 작성 및 전수 리마스터링 완료 (`assets/remastered/`, **1,159파일 / 118.96MB**: 인물 150종 `200×200` 4x EPX + 디더링 제거 및 `faces_sheet_hd.png`, UI 화면 5종, 컷신 6편/842프레임 `640×400`/`640×480`/`640×300` EPX·디더링 제거 + GIF 5종, 월드맵 15종 `512×512` 4x EPX, 챕터 스프라이트 시트 15종 7,604개 2x EPX + `sprites_index_hd.json`, PCM 음성 103개 `22,050Hz` 16-bit Cubic Hermite 업샘플링·노이즈 게이트, AdLib OPL2 19트랙 `22,050Hz` 16-bit Exciter + LFO Chorus + Schroeder Hall Reverb 마스터링, `KFONT.15`/`FONT.E16` 2x EPX 시트)
   * [x] 포트 `5188` 웹 리마스터 스튜디오(`src/main.ts` → `public/app.js`, `public/index.html`, `public/styles.css`, `server.js`) 업그레이드 및 6개 탭 A/B 실시간 비교·글로벌 모드 토글·무오류 검증 완료
   * [x] Phase 2 완료 GitHub 동기화 (`schuna/SwordsMan`)
-* **Phase 3: 코어 엔진 이식 및 오프닝·월드 구동**
-  * TypeScript 기반 오프닝(`TIT`) 시퀀서 및 `SM.EXE` 1:1 데이터/바이트코드 구동 코어 구현
-  * 45도 쿼터뷰 렌더러, 충돌 판정, 200개 지역 전환, NPC 대화 및 이벤트 스크립트 인터프리터, 고해상도 한글 폰트 UI 통합
-  * Phase 3 완료 GitHub 동기화
+* **Phase 3: 코어 엔진 이식 및 오프닝·월드·이벤트 구동** *(완료)*
+  * [x] `tools/build_world_data.py` (`npm run world-data`) 작성 및 `assets/extracted/world/chapters_data.json`(`628.2 KB`) 생성 (활성 **12개 챕터** `[0,1,2,4,5,6,7,8,11,12,13,14]`, 캐릭터 **127명**, 오브젝트 **136개**, 대사 **413라인**, `TER`/`PHASE`/`ITEM`/`COMD` 통합)
+  * [x] TypeScript 기반 오프닝(`GT`→`TIT` + `tit_theme.wav`) 시퀀서, 45도 쿼터뷰 아이소메트릭 렌더러(`768×480` 2× 확장/깊이 정렬), `TER.blocking` 충돌 판정 및 이동, 보물상자·기초 전투·`defeat_comd` 트리거, `COMD` 바이트코드 인터프리터(`0x8025`/`0x8020`/`0x8028`/`0x8036`/`0x8062`), `KFONT.15` 초상화 대화창, 글로벌 HD↔DOS 실시간 모드 전환 구현 (`src/main.ts` → `public/app.js`, `public/index.html`, `public/styles.css`)
+  * [x] 포트 `5188` 실전 플레이 탭(`#tab-play`) 라이브 브라우저 검증 완료 (오프닝/스킵, 대화 진행, 보물상자 획득, 보스 전투, 챕터 전환 `CH0`/`CH2`/`CH14`, HD↔DOS 실시간 전환, HTTP >= 400 오류 0건)
+  * [x] Phase 3 완료 GitHub 동기화 (`schuna/SwordsMan`)
 * **Phase 4: 전투·무공·UI 완성, 멀티 엔딩 및 폴리싱**
   * AI/전투/장풍·이펙트, 인벤토리·무공 퀵슬롯 HUD, 미니맵, 확장 세이브(`SV0~SV2` 호환 + 퀵세이브), 실시간 오리지널↔리마스터 토글 완성
   * 멀티 엔딩(`EM1~3`, `D9`) 통합 및 최종 패키징, GitHub 동기화

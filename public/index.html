@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>소오강호 (SwordsMan 1993) — 리마스터 에셋 익스플로러 &amp; 테스트베드</title>
-  <link rel="stylesheet" href="/styles.css?v=2" />
+  <title>소오강호 (SwordsMan 1993) — Phase 3 실전 플레이 &amp; 리마스터 스튜디오</title>
+  <link rel="stylesheet" href="/styles.css?v=3" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <div class="seal">笑傲</div>
       <div>
-        <h1>소오강호 (동방불패 · SwordsMan 1993) Remaster Studio</h1>
-        <p class="subtitle">Phase 2 · HD 그래픽(EPX/디더링제거) &amp; 오디오(Chorus/Hall Reverb/22kHz PCM) A/B 비교 스튜디오 (Port 5188)</p>
+        <h1>소오강호 (동방불패 · SwordsMan 1993) Remaster Engine &amp; Studio</h1>
+        <p class="subtitle">Phase 3 · 아이소메트릭 코어 엔진·전투·COMD 이벤트 구동 &amp; Phase 2 HD A/B 비교 스튜디오 (Port 5188)</p>
       </div>
     </div>
     <div class="controls-inline">
@@ -22,7 +22,8 @@
   </header>
 
   <nav class="tabs" id="tabNav">
-    <button class="tab active" data-tab="overview">1. 개요 · 팔레트/UI</button>
+    <button class="tab active" data-tab="play">0. 🎮 실전 플레이 (Phase 3 엔진)</button>
+    <button class="tab" data-tab="overview">1. 개요 · 팔레트/UI</button>
     <button class="tab" data-tab="cutscenes">2. 컷신 시어터</button>
     <button class="tab" data-tab="faces">3. 인물 초상화 (150)</button>
     <button class="tab" data-tab="world">4. 월드맵 · 챕터 스프라이트</button>
@@ -31,8 +32,95 @@
   </nav>
 
   <main class="container">
+    <!-- TAB 0: Playable Core Engine (Phase 3) -->
+    <section class="panel active" id="tab-play">
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-head" style="margin-bottom:8px;padding-bottom:8px;">
+          <h2>실전 플레이 — 아이소메트릭 월드 · 전투 · 이벤트 인터프리터</h2>
+          <div class="controls-inline">
+            <button id="gameIntroBtn" class="btn">🎬 오프닝 재생 (GT→TIT)</button>
+            <select id="gameChapterSelect"></select>
+            <select id="gameEventSelect"></select>
+            <button id="gameRunEventBtn" class="btn primary">▶ 이벤트 실행</button>
+            <button id="gameInteractBtn" class="btn">💬 대화/상자 (E)</button>
+            <button id="gameAttackBtn" class="btn">⚔️ 공격 (Space)</button>
+            <button id="gameBgmToggle" class="btn" data-bgm="off">🎵 BGM: OFF</button>
+            <label class="hint" style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="gameNoClipToggle" /> 경공 (충돌무시)
+            </label>
+          </div>
+        </div>
+        <p class="hint" id="gameHintBar" style="margin:0;">조작: WASD / 방향키 또는 캔버스 클릭 이동 · E 또는 상호작용 버튼: 대화/보물상자/포탈 · Space 또는 공격 버튼: 무공 시전 · 상단 버튼으로 HD 2× EPX ↔ 1993 DOS 1× 실시간 전환</p>
+      </div>
+
+      <div class="play-layout">
+        <div class="play-stage-col">
+          <div class="card play-canvas-card">
+            <div class="play-canvas-frame">
+              <canvas id="gameCanvas" width="768" height="480" tabindex="0"></canvas>
+              <button id="gameSkipIntroBtn" class="btn primary intro-skip-btn" hidden>⏭ 오프닝 건너뛰기</button>
+            </div>
+            <div class="play-footer-bar">
+              <span class="badge gold" id="gameCoordBadge">CH0 · (72.3, 72.3)</span>
+              <span class="badge" id="gameRenderBadge">✨ 2× EPX HD</span>
+              <div class="controls-inline">
+                <button class="btn game-move-btn" data-dx="-1" data-dy="-1" title="위 (W/↑)">▲</button>
+                <button class="btn game-move-btn" data-dx="-1" data-dy="1" title="왼쪽 (A/←)">◀</button>
+                <button class="btn game-move-btn" data-dx="1" data-dy="-1" title="오른쪽 (D/→)">▶</button>
+                <button class="btn game-move-btn" data-dx="1" data-dy="1" title="아래 (S/↓)">▼</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card game-dialogue-box" id="gameDialogueBox" hidden>
+            <div class="dlg-portrait-wrap">
+              <img id="gameDlgPortrait" width="100" height="100" alt="인물 초상화" />
+            </div>
+            <div class="dlg-body">
+              <div class="dlg-head-row">
+                <span class="badge gold" id="gameDlgSpeaker">인물</span>
+                <span class="mono hint" id="gameDlgStepInfo" style="margin:0;"></span>
+              </div>
+              <div id="gameDlgText" class="dlg-text"></div>
+              <canvas id="gameDlgKfont" width="560" height="104" class="dlg-kfont-canvas"></canvas>
+            </div>
+            <div class="dlg-actions">
+              <button id="gameDlgNextBtn" class="btn primary">다음 ▶</button>
+              <button id="gameDlgCloseBtn" class="btn">닫기</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="play-sidebar">
+          <div class="card">
+            <div class="card-head">
+              <h2>영호충 상태 &amp; 소지품</h2>
+              <span class="badge" id="gameSwordBadge">화산검법</span>
+            </div>
+            <div class="meta-box" id="gameStatusBox">초기화 중...</div>
+            <div class="list-scroll" id="gameInventoryList" style="max-height:135px;"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>주변 인물 · 상자 · 적 · 포탈</h2>
+              <span class="badge" id="gameObjCountBadge">0</span>
+            </div>
+            <div class="list-scroll" id="gameObjList" style="max-height:210px;"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>모험 일지</h2>
+            </div>
+            <div class="list-scroll" id="gameLogList" style="max-height:140px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- TAB 1: Overview -->
-    <section class="panel active" id="tab-overview">
+    <section class="panel" id="tab-overview">
       <div class="kpi-grid" id="kpiGrid"></div>
 
       <div class="two-col">
@@ -332,6 +420,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=2"></script>
+  <script src="/app.js?v=3"></script>
 </body>
 </html>

@@ -6,6 +6,7 @@
   "scripts": {
     "extract": "python tools/extract_assets.py",
     "remaster": "python tools/remaster_assets.py",
+    "world-data": "python tools/build_world_data.py",
     "build": "tsc",
     "start": "node server.js",
     "dev": "tsc && node server.js"
