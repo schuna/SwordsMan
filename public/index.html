@@ -2,468 +2,245 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>소오강호 (SwordsMan 1993) — Remaster v1.0 (Phase 4 완결판)</title>
-  <link rel="stylesheet" href="/styles.css?v=4" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0e14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>청운강호전 (靑雲江湖傳) — 1993 무협 액션 RPG</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/mobile.css" />
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="seal">笑傲</div>
-      <div>
-        <h1>소오강호 (동방불패 · SwordsMan 1993) Remaster Engine &amp; Studio</h1>
-        <p class="subtitle">Phase 4 · 아이소메트릭 코어 엔진·5대 무공·적 AI·미니맵·SV0~2 세이브·멀티엔딩 &amp; HD 비교 스튜디오 (Port 5188)</p>
-      </div>
+<body class="mobile-play-body">
+  <header class="mobile-topbar">
+    <div class="mobile-brand">
+      <span class="mobile-title">⚔️ 청운강호전</span>
+      <span id="statusPill" class="pill mobile-status-pill">로딩 중...</span>
     </div>
-    <div class="controls-inline">
-      <button id="globalModeToggle" class="btn primary" data-mode="remastered">✨ 리마스터 HD (Phase 2)</button>
-      <div class="status-pill" id="statusPill">로딩 중...</div>
+    <div class="hud-meters">
+      <div class="meter-box">
+        <span class="meter-label">체력</span>
+        <div class="meter-track"><div id="hudHpBar" class="meter-fill hp" style="width:100%"></div></div>
+        <span id="hudHpText" class="meter-val">360/360</span>
+      </div>
+      <div class="meter-box">
+        <span class="meter-label">내력</span>
+        <div class="meter-track"><div id="hudQiBar" class="meter-fill qi" style="width:100%"></div></div>
+        <span id="hudQiText" class="meter-val">120/120</span>
+      </div>
+      <span id="hudExpText" class="badge">Lv.1 (0/100)</span>
+    </div>
+    <div class="mobile-top-actions">
+      <button id="pwaInstallBtn" class="btn small" title="앱 설치">📲 설치</button>
+      <button class="btn small mobile-drawer-btn" data-drawer="drawerMap">🗺 상태·맵</button>
+      <button class="btn small mobile-drawer-btn" data-drawer="drawerObjs">📜 일지</button>
+      <button class="btn small mobile-drawer-btn" data-drawer="drawerMenu">⚙ 메뉴·저장</button>
     </div>
   </header>
 
-  <nav class="tabs" id="tabNav">
-    <button class="tab active" data-tab="play">0. 🎮 실전 플레이 (Phase 4 엔진)</button>
-    <button class="tab" data-tab="overview">1. 개요 · 팔레트/UI</button>
-    <button class="tab" data-tab="cutscenes">2. 컷신 시어터</button>
-    <button class="tab" data-tab="faces">3. 인물 초상화 (150)</button>
-    <button class="tab" data-tab="world">4. 월드맵 · 챕터 스프라이트</button>
-    <button class="tab" data-tab="audio">5. 오디오 스튜디오 (VOC/OPL2)</button>
-    <button class="tab" data-tab="dialogues">6. 대사 · KFONT.15</button>
-  </nav>
+  <main id="tab-play" class="panel active mobile-play-main">
+    <section class="mobile-stage">
+      <div class="mobile-canvas-wrap">
+        <canvas id="gameCanvas" width="800" height="480" class="game-canvas mobile-canvas"></canvas>
 
-  <main class="container">
-    <!-- TAB 0: Playable Core Engine (Phase 4) -->
-    <section class="panel active" id="tab-play">
-      <div class="card" style="margin-bottom:14px;">
-        <div class="card-head" style="margin-bottom:8px;padding-bottom:8px;">
-          <h2>실전 플레이 — 아이소메트릭 월드 · 무공 전투 · 세이브 · 멀티엔딩</h2>
-          <div class="controls-inline">
-            <button id="gameIntroBtn" class="btn">🎬 오프닝 재생 (GT→TIT)</button>
+        <!-- Boss HP & Poise HUD -->
+        <div id="bossHud" class="boss-hud" hidden>
+          <div id="bossName" class="boss-name">보스</div>
+          <div class="boss-bars">
+            <div class="meter-track boss"><div id="bossHpBar" class="meter-fill boss-hp" style="width:100%"></div></div>
+            <div class="meter-track poise"><div id="bossPoiseBar" class="meter-fill boss-poise" style="width:100%"></div></div>
+          </div>
+        </div>
+
+        <div id="alertBanner" class="alert-banner" hidden></div>
+        <div id="nearbyPrompt" class="nearby-prompt" hidden></div>
+        <button id="gameSkipIntroBtn" class="btn small skip-intro-btn" hidden>⏭ 오프닝 건너뛰기 (ESC)</button>
+
+        <div class="mobile-hud-badges">
+          <span id="hudComboBadge" class="badge combo" hidden></span>
+          <span id="gameCoordBadge" class="badge">CH1 (5, 13)</span>
+        </div>
+
+        <!-- Touch D-Pad -->
+        <div class="mobile-dpad-overlay" aria-label="터치 이동 패드">
+          <button class="btn small game-move-btn" data-dx="-1" data-dy="-1" aria-label="북서">↖</button>
+          <button class="btn small game-move-btn" data-dx="0" data-dy="-1" aria-label="북">▲</button>
+          <button class="btn small game-move-btn" data-dx="1" data-dy="-1" aria-label="북동">↗</button>
+          <button class="btn small game-move-btn" data-dx="-1" data-dy="0" aria-label="서">◀</button>
+          <div class="mobile-dpad-center">WASD</div>
+          <button class="btn small game-move-btn" data-dx="1" data-dy="0" aria-label="동">▶</button>
+          <button class="btn small game-move-btn" data-dx="-1" data-dy="1" aria-label="남서">↙</button>
+          <button class="btn small game-move-btn" data-dx="0" data-dy="1" aria-label="남">▼</button>
+          <button class="btn small game-move-btn" data-dx="1" data-dy="1" aria-label="남동">↘</button>
+        </div>
+
+        <!-- Touch Action Buttons -->
+        <div class="mobile-action-overlay" aria-label="전투 및 상호작용">
+          <button id="gameInteractBtn" class="mobile-act-btn talk" title="대화/조사 (E)">💬<span>대화</span></button>
+          <button id="gameJumpBtn" class="mobile-act-btn jump" title="경공 도약 (X)">🪽<span>경공</span></button>
+          <button id="gameParryBtn" class="mobile-act-btn parry" title="패링 (Q)">🛡<span>패링</span></button>
+          <button id="gameAttackBtn" class="mobile-act-btn attack" title="공격 (Space)">⚔️<span>공격</span></button>
+        </div>
+
+        <!-- Dialogue Box Overlay -->
+        <div id="gameDialogueBox" class="game-dialogue-box mobile-dlg-overlay" hidden>
+          <div class="game-dlg-body">
+            <div class="game-dlg-head">
+              <strong id="gameDlgSpeaker">인물</strong>
+              <span id="gameDlgStepInfo" class="muted">1 / 1</span>
+            </div>
+            <div id="gameDlgText" class="game-dlg-text"></div>
+            <div class="game-dlg-actions">
+              <button id="gameDlgNextBtn" class="btn small primary">다음 ▶</button>
+              <button id="gameDlgCloseBtn" class="btn small">닫기</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Skill Bar & Objective -->
+      <div class="mobile-bottom-bar">
+        <div id="gameSkillBar" class="skill-bar mobile-skill-bar"></div>
+        <div id="hudObjective" class="hud-objective"></div>
+      </div>
+    </section>
+
+    <!-- Drawer 1: Minimap + Hero Status + Inventory -->
+    <aside id="drawerMap" class="mobile-drawer hidden" aria-label="상태 및 미니맵">
+      <div class="mobile-drawer-head">
+        <strong>🗺 미니맵 · 상태 · 소지품</strong>
+        <button class="btn small mobile-drawer-close" data-drawer="drawerMap">✕</button>
+      </div>
+      <div class="mobile-drawer-body">
+        <div class="card">
+          <h3>실시간 미니맵</h3>
+          <div class="minimap-wrap">
+            <canvas id="gameMinimapCanvas" width="160" height="160" class="minimap-canvas"></canvas>
+            <div id="gameMinimapCoords" class="muted">X:0 Y:0</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>임청운 상태</h3>
+          <div id="gameStatusBox" class="game-status-box"></div>
+        </div>
+        <div class="card">
+          <h3>소지품 &amp; 단약</h3>
+          <div id="gameInventoryList" class="game-inv-list"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Drawer 2: Adventure Log -->
+    <aside id="drawerObjs" class="mobile-drawer hidden" aria-label="모험 일지">
+      <div class="mobile-drawer-head">
+        <strong>📜 모험 일지 &amp; 조작 안내</strong>
+        <button class="btn small mobile-drawer-close" data-drawer="drawerObjs">✕</button>
+      </div>
+      <div class="mobile-drawer-body">
+        <div class="card">
+          <h3>모험 일지</h3>
+          <div id="gameLogList" class="game-log-list"></div>
+        </div>
+        <div class="card">
+          <h3>키보드 단축키</h3>
+          <div class="muted" style="font-size:12px;line-height:1.6;">
+            이동: WASD / 방향키 · 공격: Space / J<br />
+            저스트 패링: Q / K · 경공 도약: X<br />
+            대화/보물상자: E / F1 · 무공 전환: 1~5<br />
+            빠른 저장/로드: F5 / F9
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Drawer 3: Chapter / Save / Ending / Audio -->
+    <aside id="drawerMenu" class="mobile-drawer hidden" aria-label="게임 메뉴 및 저장">
+      <div class="mobile-drawer-head">
+        <strong>⚙ 챕터 · 저장 · 엔딩 · 오디오</strong>
+        <button class="btn small mobile-drawer-close" data-drawer="drawerMenu">✕</button>
+      </div>
+      <div class="mobile-drawer-body">
+        <div class="card">
+          <h3>12챕터 이동</h3>
+          <label class="mobile-field">
+            <span>챕터 선택</span>
             <select id="gameChapterSelect"></select>
-            <select id="gameEventSelect"></select>
-            <button id="gameRunEventBtn" class="btn primary">▶ 이벤트 실행</button>
-            <button id="gameInteractBtn" class="btn">💬 대화/상자 (E)</button>
-            <button id="gameAttackBtn" class="btn">⚔️ 공격/시전 (Space)</button>
-            <button id="gameBgmToggle" class="btn" data-bgm="off">🎵 BGM: OFF</button>
-            <label class="hint" style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;">
-              <input type="checkbox" id="gameAiToggle" checked /> 적 AI 교전
-            </label>
-            <label class="hint" style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;">
-              <input type="checkbox" id="gameNoClipToggle" /> 경공 (충돌무시)
-            </label>
+          </label>
+          <div class="mobile-btn-grid">
+            <button id="gameIntroBtn" class="btn small">🎬 오프닝 재생</button>
+            <button id="gameBgmToggle" class="btn small primary">🎵 BGM: ON</button>
           </div>
         </div>
-        <div class="save-bar">
-          <div class="controls-inline">
-            <span class="badge gold">세이브/로드</span>
+
+        <div class="card">
+          <h3>저장 / 불러오기 (SV0~SV2 · QUICK)</h3>
+          <label class="mobile-field">
+            <span>슬롯</span>
             <select id="gameSaveSlotSelect">
-              <option value="SV0">슬롯 1 (SV0)</option>
-              <option value="SV1">슬롯 2 (SV1)</option>
-              <option value="SV2">슬롯 3 (SV2)</option>
-              <option value="QUICK">퀵세이브 (F5/F9)</option>
+              <option value="0">SV0 (슬롯 1)</option>
+              <option value="1">SV1 (슬롯 2)</option>
+              <option value="2">SV2 (슬롯 3)</option>
+              <option value="quick">QUICK (자동)</option>
             </select>
-            <button id="gameSaveBtn" class="btn">💾 저장 (F5)</button>
-            <button id="gameLoadBtn" class="btn">📂 불러오기 (F9)</button>
-          </div>
-          <div class="controls-inline">
-            <span class="badge gold">멀티 엔딩</span>
-            <select id="gameEndingSelect">
-              <option value="d9">진 엔딩 (D9) · 흑목애 결전</option>
-              <option value="em1">엔딩 1 (EM1) · 화산의 검객</option>
-              <option value="em2">엔딩 2 (EM2) · 소오강호 합주</option>
-              <option value="em3">엔딩 3 (EM3) · 독고구검 전승</option>
-            </select>
-            <button id="gameEndingBtn" class="btn">🏆 엔딩 시퀀스</button>
-          </div>
-        </div>
-        <p class="hint" id="gameHintBar" style="margin:6px 0 0;">조작: WASD / 방향키 / 캔버스·미니맵 클릭 이동 · 1~5: 무공 퀵슬롯 선택 · Space: 시전 · E: 대화/상자 · F5/F9: 저장/불러오기 · 상단 버튼으로 HD ↔ DOS 1× 실시간 전환</p>
-      </div>
-
-      <div class="play-layout">
-        <div class="play-stage-col">
-          <div class="card play-canvas-card">
-            <div class="play-canvas-frame">
-              <canvas id="gameCanvas" width="768" height="480" tabindex="0"></canvas>
-              <button id="gameSkipIntroBtn" class="btn primary intro-skip-btn" hidden>⏭ 컷신 건너뛰기</button>
-            </div>
-            <div class="skill-bar" id="gameSkillBar"></div>
-            <div class="play-footer-bar">
-              <span class="badge gold" id="gameCoordBadge">CH0 · (72.3, 72.3)</span>
-              <span class="badge" id="gameRenderBadge">✨ 2× EPX HD</span>
-              <div class="controls-inline">
-                <button class="btn game-move-btn" data-dx="-1" data-dy="-1" title="위 (W/↑)">▲</button>
-                <button class="btn game-move-btn" data-dx="-1" data-dy="1" title="왼쪽 (A/←)">◀</button>
-                <button class="btn game-move-btn" data-dx="1" data-dy="-1" title="오른쪽 (D/→)">▶</button>
-                <button class="btn game-move-btn" data-dx="1" data-dy="1" title="아래 (S/↓)">▼</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card game-dialogue-box" id="gameDialogueBox" hidden>
-            <div class="dlg-portrait-wrap">
-              <img id="gameDlgPortrait" width="100" height="100" alt="인물 초상화" />
-            </div>
-            <div class="dlg-body">
-              <div class="dlg-head-row">
-                <span class="badge gold" id="gameDlgSpeaker">인물</span>
-                <span class="mono hint" id="gameDlgStepInfo" style="margin:0;"></span>
-              </div>
-              <div id="gameDlgText" class="dlg-text"></div>
-              <canvas id="gameDlgKfont" width="560" height="104" class="dlg-kfont-canvas"></canvas>
-            </div>
-            <div class="dlg-actions">
-              <button id="gameDlgNextBtn" class="btn primary">다음 ▶</button>
-              <button id="gameDlgCloseBtn" class="btn">닫기</button>
-            </div>
+          </label>
+          <div class="mobile-btn-grid">
+            <button id="gameSaveBtn" class="btn small">💾 저장</button>
+            <button id="gameLoadBtn" class="btn small">📂 불러오기</button>
           </div>
         </div>
 
-        <div class="play-sidebar">
-          <div class="card" id="gameMinimapCard">
-            <div class="card-head">
-              <h2>실시간 미니맵</h2>
-              <span class="badge" id="gameMinimapCoords">128×128</span>
-            </div>
-            <div class="minimap-wrap">
-              <canvas id="gameMinimapCanvas" width="160" height="160"></canvas>
-              <div class="minimap-legend">
-                <div><span class="legend-dot" style="background:#fff4b8;"></span> 영호충</div>
-                <div><span class="legend-dot" style="background:#f25252;"></span> 적 / 보스</div>
-                <div><span class="legend-dot" style="background:#d4a853;"></span> 보물상자</div>
-                <div><span class="legend-dot" style="background:#3da88e;"></span> 포탈 / NPC</div>
-                <p class="hint" style="margin:6px 0 0;font-size:0.74rem;">클릭: 길찾기 이동<br/>Shift+클릭: 즉시 이동</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <h2>영호충 상태 &amp; 소지품 (클릭 사용)</h2>
-              <span class="badge" id="gameSwordBadge">화산검법</span>
-            </div>
-            <div class="meta-box" id="gameStatusBox">초기화 중...</div>
-            <div class="list-scroll" id="gameInventoryList" style="max-height:135px;"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <h2>주변 인물 · 상자 · 적 · 포탈</h2>
-              <span class="badge" id="gameObjCountBadge">0</span>
-            </div>
-            <div class="list-scroll" id="gameObjList" style="max-height:210px;"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <h2>모험 일지</h2>
-            </div>
-            <div class="list-scroll" id="gameLogList" style="max-height:140px;"></div>
-          </div>
+        <div class="card">
+          <h3>멀티 엔딩 (4종)</h3>
+          <label class="mobile-field">
+            <span>엔딩 선택</span>
+            <select id="gameEndingSelect"></select>
+          </label>
+          <button id="gameEndingBtn" class="btn small primary" style="width:100%">🏆 엔딩 감상</button>
         </div>
       </div>
-    </section>
-
-    <!-- TAB 1: Overview -->
-    <section class="panel" id="tab-overview">
-      <div class="kpi-grid" id="kpiGrid"></div>
-
-      <div class="two-col">
-        <div class="card">
-          <div class="card-head">
-            <h2>화면 업스케일 &amp; CRT 필터 비교기</h2>
-            <div class="controls-inline">
-              <select id="uiScreenSelect">
-                <option value="ui/cfglbm.png">CFGLBM (메인 UI)</option>
-                <option value="ui/cfglbm0.png">CFGLBM0 (보조 UI)</option>
-                <option value="ui/pass01.png">PASS01.PCX (암호표 1)</option>
-                <option value="ui/pass02.png">PASS02.PCX (암호표 2)</option>
-                <option value="ui/pass_ref.png">pass.PNG (참조표)</option>
-              </select>
-              <select id="uiFilterSelect">
-                <option value="remastered" selected>Phase 2 리마스터 HD (A/B 분할 비교)</option>
-                <option value="nearest">Nearest (도스 원본 픽셀)</option>
-                <option value="smooth">Bilinear Smooth</option>
-                <option value="crt">CRT 스캔라인 + 글로우</option>
-              </select>
-              <select id="uiScaleSelect">
-                <option value="1">1x</option>
-                <option value="2" selected>2x</option>
-                <option value="3">3x</option>
-              </select>
-            </div>
-          </div>
-          <div class="player-bar" id="uiSplitBar" style="margin-top:0;margin-bottom:10px">
-            <span class="badge">◀ 1993 도스 원본</span>
-            <input type="range" id="uiSplitRange" min="0" max="100" value="50" />
-            <span class="badge gold">Phase 2 리마스터 HD ▶</span>
-            <span id="uiSplitPct" class="mono">50%</span>
-          </div>
-          <div class="canvas-stage" id="uiStage">
-            <canvas id="uiCanvas" width="640" height="400"></canvas>
-          </div>
-          <p class="hint" id="uiInfo">슬라이더를 움직여 도스 원본(좌)과 EPX/디더링 제거 리마스터(우)를 실시간으로 비교합니다.</p>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>VGA 256색 팔레트 뷰어</h2>
-            <select id="palSelect">
-              <option value="face_pal">FACE.PAL (인물/스프라이트 기본)</option>
-              <option value="pal_idx_0">PAL.IDX [0]</option>
-              <option value="pal_idx_1">PAL.IDX [1]</option>
-              <option value="pal_idx_2">PAL.IDX [2]</option>
-              <option value="pal_idx_3">PAL.IDX [3]</option>
-              <option value="pal_idx_4">PAL.IDX [4]</option>
-            </select>
-          </div>
-          <canvas id="palCanvas" width="384" height="384" class="pal-canvas"></canvas>
-          <div class="pal-readout" id="palReadout">팔레트 셀에 마우스를 올리면 인덱스와 RGB 헥스 코드가 표시됩니다.</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 2: Cutscenes -->
-    <section class="panel" id="tab-cutscenes">
-      <div class="two-col wide-left">
-        <div class="card">
-          <div class="card-head">
-            <h2>오프닝 &amp; 엔딩 시어터</h2>
-            <div class="controls-inline">
-              <select id="sceneSourceSelect">
-                <option value="remastered" selected>Phase 2 리마스터 HD (2x EPX + 음원 리마스터)</option>
-                <option value="extracted">1993 도스 원본 (320×200 / OPL2 원본)</option>
-              </select>
-              <select id="sceneSelect">
-                <option value="tit">TIT.GRP (오프닝 서화 타이틀 · 640×300)</option>
-                <option value="em1">EM1.GRP (프롤로그 1 · 320→640px)</option>
-                <option value="em2">EM2.GRP (프롤로그 2 · 320→640px)</option>
-                <option value="em3">EM3.GRP (프롤로그 3 · 320→640px)</option>
-                <option value="d9">D9.GRP (엔딩/메인이벤트 · 320→640px)</option>
-                <option value="gt">GT.GRP (타이틀/크레딧 · 640×480)</option>
-              </select>
-              <select id="sceneFilter">
-                <option value="nearest" selected>Sharp (Native/EPX)</option>
-                <option value="crt">CRT Scanline</option>
-                <option value="smooth">Smooth Upscale</option>
-              </select>
-            </div>
-          </div>
-          <div class="canvas-stage dark-stage">
-            <canvas id="sceneCanvas" width="640" height="400"></canvas>
-          </div>
-          <div class="player-bar">
-            <button id="scenePlayBtn" class="btn primary">▶ 재생 (음악 동기화)</button>
-            <button id="scenePrevBtn" class="btn">◀ 이전</button>
-            <button id="sceneNextBtn" class="btn">다음 ▶</button>
-            <input type="range" id="sceneScrubber" min="0" max="0" value="0" />
-            <span id="sceneFrameLabel" class="mono">0 / 0</span>
-          </div>
-          <div class="player-bar">
-            <label>프레임 간격(ms): <input type="number" id="sceneSpeedInput" value="100" min="30" max="2000" step="10" style="width:70px"/></label>
-            <span id="sceneBgmLabel" class="hint">연동 BGM: -</span>
-            <audio id="sceneAudio" controls style="height:28px;flex:1;max-width:300px"></audio>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head"><h2>GIF 프리뷰 &amp; 장면 정보</h2></div>
-          <div id="sceneMetaBox" class="meta-box"></div>
-          <div class="gif-preview-wrap">
-            <img id="sceneGifPreview" alt="Cutscene GIF preview" style="display:none;max-width:100%;border-radius:6px;border:1px solid var(--border)" />
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 3: Faces -->
-    <section class="panel" id="tab-faces">
-      <div class="two-col wide-left">
-        <div class="card">
-          <div class="card-head">
-            <h2>FACE.GRP 인물 초상화 150종</h2>
-            <div class="controls-inline">
-              <select id="facesGridToggle">
-                <option value="remastered" selected>Phase 2 리마스터 HD 썸네일</option>
-                <option value="extracted">1993 도스 원본 (50×50)</option>
-              </select>
-              <input type="search" id="faceSearch" placeholder="번호 필터 (예: 0, 12, 149)" />
-            </div>
-          </div>
-          <div class="faces-grid" id="facesGrid"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-head"><h2>초상화 리마스터 비교 (#<span id="faceSelId">000</span>)</h2></div>
-          <div class="face-compare">
-            <div>
-              <p class="hint">원본 1x (50×50)</p>
-              <canvas id="faceOrigCanvas" width="50" height="50" class="checker"></canvas>
-            </div>
-            <div>
-              <p class="hint">4x 도트 (Nearest)</p>
-              <canvas id="faceNearCanvas" width="200" height="200" class="checker"></canvas>
-            </div>
-            <div>
-              <p class="hint" id="faceRemasterLabel">Phase 2 리마스터 HD (200×200 EPX)</p>
-              <canvas id="faceSmoothCanvas" width="200" height="200" class="checker"></canvas>
-            </div>
-          </div>
-          <div class="meta-box" style="margin-top:14px">
-            <strong>복제 방지 암호표 (PASS01 / PASS02)</strong>
-            <p class="hint">Phase 2에서는 1993년 정품 암호 질의 화면을 건너뛰거나 자동 통과/도감 열람 모드로 제공합니다.</p>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <img src="/assets/extracted/ui/pass01.png" alt="PASS01" style="width:48%;border-radius:4px;border:1px solid var(--border)" />
-              <img src="/assets/extracted/ui/pass02.png" alt="PASS02" style="width:48%;border-radius:4px;border:1px solid var(--border)" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 4: World Maps & Sprites -->
-    <section class="panel" id="tab-world">
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-          <h2>챕터별 월드맵 &amp; 스프라이트 (EVENT.0 ~ EVENT.14)</h2>
-          <div class="controls-inline">
-            <select id="worldRemasterToggle">
-              <option value="remastered" selected>Phase 2 리마스터 (512px 맵 / 2x EPX 시트)</option>
-              <option value="extracted">1993 도스 원본 (128px 맵 / 1x 시트)</option>
-            </select>
-            <label>챕터 선택:
-              <select id="chapterSelect"></select>
-            </label>
-            <span id="chapterStats" class="hint"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="two-col">
-        <div class="card">
-          <div class="card-head"><h2>MAP.<span id="mapChLabel">0</span> (<span id="mapResLabel">512×512 리마스터</span>)</h2></div>
-          <div class="canvas-stage">
-            <canvas id="mapCanvas" width="384" height="384"></canvas>
-          </div>
-          <div class="meta-box" id="worldMetaBox"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>스프라이트 애니메이터 &amp; A/B 비교</h2>
-            <div class="controls-inline">
-              <button id="sprPlayBtn" class="btn primary">▶ 애니 재생</button>
-              <button id="sprPrevBtn" class="btn">◀</button>
-              <button id="sprNextBtn" class="btn">▶</button>
-              <span id="sprIdxLabel" class="mono">0 / 0</span>
-            </div>
-          </div>
-          <div class="sprite-inspector">
-            <div>
-              <p class="hint" style="margin:0 0 4px">도스 원본 (1x 확대)</p>
-              <canvas id="spriteOrigCanvas" width="128" height="160" class="checker"></canvas>
-            </div>
-            <div>
-              <p class="hint" style="margin:0 0 4px">Phase 2 리마스터 (2x EPX)</p>
-              <canvas id="spriteZoomCanvas" width="160" height="160" class="checker"></canvas>
-            </div>
-            <div id="spriteDetailMeta" class="meta-box" style="flex:1"></div>
-          </div>
-          <p class="hint" style="margin:10px 0 6px">시트의 스프라이트를 클릭해 프레임 선택:</p>
-          <div class="sheet-scroll">
-            <canvas id="sheetCanvas"></canvas>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 5: Audio Studio -->
-    <section class="panel" id="tab-audio">
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-          <h2>실시간 오디오 파형 &amp; 음질 테스트베드</h2>
-          <div class="controls-inline">
-            <label>VOC 재생 속도(샘플레이트 보정):
-              <select id="vocRateSelect">
-                <option value="1.0" selected>8,000 Hz (1.0x)</option>
-                <option value="1.378">11,025 Hz (1.38x)</option>
-                <option value="0.75">6,000 Hz (0.75x)</option>
-              </select>
-            </label>
-            <span id="audioNowPlaying" class="mono">재생 중인 트랙 없음</span>
-          </div>
-        </div>
-        <canvas id="waveCanvas" width="960" height="110" style="width:100%;height:110px;background:#07090e;border-radius:6px;border:1px solid var(--border)"></canvas>
-        <audio id="mainAudioPlayer" controls style="width:100%;margin-top:8px"></audio>
-      </div>
-
-      <div class="two-col">
-        <div class="card">
-          <div class="card-head"><h2>AdLib OPL2 배경음악 &amp; 효과음 (19트랙 · WAV / MIDI)</h2></div>
-          <div class="list-scroll" id="adlibList"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>PCM 음성/효과음 (103클립 · 원본 vs 22kHz 리마스터)</h2>
-            <div class="controls-inline">
-              <select id="vocRemasterToggle">
-                <option value="remastered" selected>기본: Phase 2 리마스터 (22kHz 16-bit)</option>
-                <option value="extracted">기본: 1993 원본 (8kHz 8-bit)</option>
-              </select>
-              <select id="vocBankFilter">
-                <option value="ALL">전체 뱅크 (103)</option>
-                <option value="VOC0">VOC0 (인게임 · 14)</option>
-                <option value="E1V">E1V (오프닝 1 · 12)</option>
-                <option value="E2V">E2V (오프닝 2 · 25)</option>
-                <option value="E3V">E3V (오프닝 3 · 30)</option>
-                <option value="D9V">D9V (D9 이벤트 · 22)</option>
-              </select>
-            </div>
-          </div>
-          <div class="list-scroll" id="vocList"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 6: Dialogues & KFONT -->
-    <section class="panel" id="tab-dialogues">
-      <div class="two-col">
-        <div class="card">
-          <div class="card-head">
-            <h2>한국어 스크립트 / 대사 탐색 (EVENT.0~14)</h2>
-            <div class="controls-inline">
-              <select id="dlgChapterSelect"></select>
-              <input type="search" id="dlgSearch" placeholder="한글 대사/인물/무공 검색..." />
-            </div>
-          </div>
-          <div class="list-scroll" id="dlgList" style="max-height:520px"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>1993 KFONT.15 한글 16×16 비트맵 렌더러</h2>
-            <select id="fontRenderMode">
-              <option value="phase2" selected>Phase 2 Scale2x 곡선 보간 + 금빛 그라데이션</option>
-              <option value="remaster">그림자 + 고대비 (2x)</option>
-              <option value="dos">도스 16×16 도트 원본 (2x)</option>
-            </select>
-          </div>
-          <textarea id="kfontInput" rows="3" placeholder="여기에 한글/영문 문장을 입력하거나 왼쪽 대사를 클릭하세요...">소오강호 리마스터 테스트: 영호충과 동방불패!</textarea>
-          <div class="canvas-stage dark-stage" style="margin-top:10px">
-            <canvas id="kfontCanvas" width="600" height="200"></canvas>
-          </div>
-          <p class="hint" style="margin-top:10px">원본 `KFONT.15` 2,350자 완성형 한글 + `FONT.E16` 8×16 영문 폰트 글리프맵에 실시간 Scale2x 곡선 보간 및 그라데이션을 합성합니다.</p>
-          <div style="margin-top:12px">
-            <p class="hint" id="kfontSheetLabel">Phase 2 KFONT.15 EPX 2x 리마스터 시트 미리보기:</p>
-            <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:4px;background:#07090e">
-              <img id="kfontSheetImg" src="/assets/remastered/fonts/kfont_15_hangul_hd.png" alt="KFONT.15 Hangul sheet" style="max-width:100%" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+    </aside>
   </main>
 
-  <script src="/app.js?v=3"></script>
+  <script>
+    (function () {
+      function closeAllDrawers() {
+        document.querySelectorAll('.mobile-drawer').forEach(function (el) {
+          el.classList.add('hidden');
+        });
+      }
+      function toggleDrawer(id, forceClose) {
+        document.querySelectorAll('.mobile-drawer').forEach(function (el) {
+          if (el.id === id && !forceClose) {
+            el.classList.toggle('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        });
+      }
+      document.querySelectorAll('.mobile-drawer-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleDrawer(btn.getAttribute('data-drawer'), false);
+        });
+      });
+      document.querySelectorAll('.mobile-drawer-close').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleDrawer(btn.getAttribute('data-drawer'), true);
+        });
+      });
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && t.closest && !t.closest('.mobile-drawer') && !t.closest('.mobile-drawer-btn')) {
+          closeAllDrawers();
+        }
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeAllDrawers();
+      });
+    })();
+  </script>
+  <script type="module" src="/dist/main.js"></script>
 </body>
 </html>
