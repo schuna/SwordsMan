@@ -207,7 +207,7 @@ class SwordsManApp {
 
   private setupPwa(): void {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      navigator.serviceWorker.register('./sw.js').catch(() => undefined);
     }
     const installBtn = document.getElementById('pwaInstallBtn');
     let deferred: { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null = null;
