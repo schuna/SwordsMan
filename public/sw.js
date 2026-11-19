@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swordsman-v5-play-v4';
+const CACHE_NAME = 'swordsman-v5-play-v5';
 
 const PRECACHE_URLS = [
   './',
