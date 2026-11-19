@@ -9,17 +9,25 @@
   display: none !important;
 }
 
-html,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
 body.mobile-play-body {
   margin: 0;
   padding: 0;
   height: 100dvh;
   max-height: 100dvh;
+  min-height: 0 !important;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   background: #0b0e14;
   touch-action: manipulation;
   user-select: none;
@@ -77,12 +85,12 @@ body.mobile-play-body {
 
 main.mobile-play-main.panel.active {
   position: relative;
-  flex: 1 1 0%;
+  height: 100%;
   min-height: 0;
   min-width: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   padding: 0 !important;
   margin: 0 !important;
   max-width: none !important;
@@ -91,14 +99,13 @@ main.mobile-play-main.panel.active {
 
 .mobile-stage {
   position: relative;
-  flex: 1 1 0%;
+  height: 100%;
   min-height: 0;
   min-width: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
   padding: 6px 8px;
   padding-bottom: max(6px, env(safe-area-inset-bottom));
   gap: 6px;
@@ -107,7 +114,7 @@ main.mobile-play-main.panel.active {
 
 .mobile-canvas-wrap {
   position: relative;
-  flex: 1 1 0%;
+  height: 100%;
   min-height: 0;
   min-width: 0;
   width: 100%;
@@ -519,6 +526,7 @@ main.mobile-play-main.panel.active {
     width: 44px;
   }
   .mobile-stage {
+    grid-template-rows: minmax(0, 1fr) auto auto;
     padding: 4px 6px;
     gap: 6px;
   }
