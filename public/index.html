@@ -62,27 +62,6 @@
           <span id="gameCoordBadge" class="badge">CH1 (5, 13)</span>
         </div>
 
-        <!-- Touch D-Pad -->
-        <div class="mobile-dpad-overlay" aria-label="터치 이동 패드">
-          <button class="btn small game-move-btn" data-dx="-1" data-dy="-1" aria-label="북서">↖</button>
-          <button class="btn small game-move-btn" data-dx="0" data-dy="-1" aria-label="북">▲</button>
-          <button class="btn small game-move-btn" data-dx="1" data-dy="-1" aria-label="북동">↗</button>
-          <button class="btn small game-move-btn" data-dx="-1" data-dy="0" aria-label="서">◀</button>
-          <div class="mobile-dpad-center">WASD</div>
-          <button class="btn small game-move-btn" data-dx="1" data-dy="0" aria-label="동">▶</button>
-          <button class="btn small game-move-btn" data-dx="-1" data-dy="1" aria-label="남서">↙</button>
-          <button class="btn small game-move-btn" data-dx="0" data-dy="1" aria-label="남">▼</button>
-          <button class="btn small game-move-btn" data-dx="1" data-dy="1" aria-label="남동">↘</button>
-        </div>
-
-        <!-- Touch Action Buttons -->
-        <div class="mobile-action-overlay" aria-label="전투 및 상호작용">
-          <button id="gameInteractBtn" class="mobile-act-btn talk" title="대화/조사 (E)">💬<span>대화</span></button>
-          <button id="gameJumpBtn" class="mobile-act-btn jump" title="경공 도약 (X)">🪽<span>경공</span></button>
-          <button id="gameParryBtn" class="mobile-act-btn parry" title="패링 (Q)">🛡<span>패링</span></button>
-          <button id="gameAttackBtn" class="mobile-act-btn attack" title="공격 (Space)">⚔️<span>공격</span></button>
-        </div>
-
         <!-- Dialogue Box Overlay -->
         <div id="gameDialogueBox" class="game-dialogue-box mobile-dlg-overlay" hidden>
           <div class="game-dlg-body">
@@ -96,6 +75,28 @@
               <button id="gameDlgCloseBtn" class="btn small">닫기</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Touch Controls Layer (overlays canvas in landscape, docks below canvas in portrait) -->
+      <div class="mobile-controls-layer">
+        <div class="mobile-dpad-overlay" aria-label="터치 이동 패드">
+          <button class="btn small game-move-btn" data-dx="-1" data-dy="-1" aria-label="북서">↖</button>
+          <button class="btn small game-move-btn" data-dx="0" data-dy="-1" aria-label="북">▲</button>
+          <button class="btn small game-move-btn" data-dx="1" data-dy="-1" aria-label="북동">↗</button>
+          <button class="btn small game-move-btn" data-dx="-1" data-dy="0" aria-label="서">◀</button>
+          <div class="mobile-dpad-center">WASD</div>
+          <button class="btn small game-move-btn" data-dx="1" data-dy="0" aria-label="동">▶</button>
+          <button class="btn small game-move-btn" data-dx="-1" data-dy="1" aria-label="남서">↙</button>
+          <button class="btn small game-move-btn" data-dx="0" data-dy="1" aria-label="남">▼</button>
+          <button class="btn small game-move-btn" data-dx="1" data-dy="1" aria-label="남동">↘</button>
+        </div>
+
+        <div class="mobile-action-overlay" aria-label="전투 및 상호작용">
+          <button id="gameInteractBtn" class="mobile-act-btn talk" title="대화/조사 (E)">💬<span>대화</span></button>
+          <button id="gameJumpBtn" class="mobile-act-btn jump" title="경공 도약 (X)">🪽<span>경공</span></button>
+          <button id="gameParryBtn" class="mobile-act-btn parry" title="패링 (Q)">🛡<span>패링</span></button>
+          <button id="gameAttackBtn" class="mobile-act-btn attack" title="공격 (Space)">⚔️<span>공격</span></button>
         </div>
       </div>
 
@@ -161,6 +162,20 @@
         <button class="btn small mobile-drawer-close" data-drawer="drawerMenu">✕</button>
       </div>
       <div class="mobile-drawer-body">
+        <div class="card">
+          <h3>화면 비율 &amp; 해상도</h3>
+          <label class="mobile-field">
+            <span>화면 비율 모드</span>
+            <select id="gameAspectSelect">
+              <option value="auto">자동 맞춤 (가로/세로 꽉 찬 화면)</option>
+              <option value="5:3">클래식 5:3 (800×480)</option>
+              <option value="4:3">표준 4:3 (640×480)</option>
+              <option value="16:9">와이드 16:9 (854×480)</option>
+              <option value="3:4">세로 전용 3:4 (450×600)</option>
+            </select>
+          </label>
+        </div>
+
         <div class="card">
           <h3>12챕터 이동</h3>
           <label class="mobile-field">

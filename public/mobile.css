@@ -78,6 +78,7 @@
 }
 
 .mobile-stage {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -103,14 +104,27 @@
   overflow: hidden;
 }
 
-.mobile-canvas {
+#gameCanvas.mobile-canvas {
   max-width: 100%;
   max-height: 100%;
-  width: auto !important;
-  height: auto !important;
-  aspect-ratio: 768 / 480;
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto;
   object-fit: contain;
+  image-rendering: pixelated;
   display: block;
+}
+
+.mobile-controls-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.mobile-controls-layer .mobile-dpad-overlay,
+.mobile-controls-layer .mobile-action-overlay {
+  pointer-events: auto;
 }
 
 .mobile-hud-badges {
@@ -449,9 +463,6 @@
 }
 
 @media (max-width: 768px) {
-  .hud-meters {
-    display: none;
-  }
   .mobile-action-overlay {
     gap: 8px;
   }
@@ -459,5 +470,69 @@
     width: 48px;
     height: 48px;
     font-size: 15px;
+  }
+}
+
+@media (orientation: portrait), (max-width: 640px) and (max-aspect-ratio: 1/1) {
+  .mobile-topbar {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 5px 8px;
+  }
+  .hud-meters {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .meter-track {
+    width: 58px;
+  }
+  .mobile-stage {
+    padding: 4px 6px;
+    gap: 6px;
+  }
+  .mobile-controls-layer {
+    position: static;
+    inset: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 2px 4px;
+    pointer-events: auto;
+    flex-shrink: 0;
+  }
+  .mobile-dpad-overlay {
+    position: static;
+    left: auto;
+    bottom: auto;
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
+    opacity: 1;
+  }
+  .mobile-dpad-overlay .game-move-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+  .mobile-action-overlay {
+    position: static;
+    right: auto;
+    bottom: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 52px);
+    gap: 6px;
+  }
+  .mobile-act-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 16px;
+  }
+  .mobile-dlg-overlay {
+    width: 96%;
+    max-height: 48%;
+    bottom: 6px;
   }
 }

@@ -43,6 +43,7 @@ class SwordsManApp {
     );
     this.bindInputs();
     this.bindUiControls();
+    this.setupViewportAspect();
     this.setupPwa();
 
     // 시작 시 오프닝 컷신 재생 (스킵 가능)
@@ -191,6 +192,54 @@ class SwordsManApp {
     document.getElementById('gameEndingBtn')?.addEventListener('click', () => {
       const eid = (endSel?.value ?? 'd9') as EndingId;
       this.playEnding(eid);
+    });
+  }
+
+  private setupViewportAspect(): void {
+    const STORAGE_KEY = 'swordsman_v5_aspect';
+    const aspectSel = document.getElementById('gameAspectSelect') as HTMLSelectElement | null;
+    const wrap = this.canvas.parentElement;
+    let mode = localStorage.getItem(STORAGE_KEY) || 'auto';
+    if (aspectSel) {
+      aspectSel.value = mode;
+    }
+
+    const applySize = () => {
+      let targetW = 800;
+      let targetH = 480;
+      if (mode === 'auto' && wrap) {
+        const cw = Math.max(320, Math.round(wrap.clientWidth));
+        const ch = Math.max(240, Math.round(wrap.clientHeight));
+        const maxDim = 900;
+        const scale = Math.min(1, maxDim / Math.max(cw, ch));
+        targetW = Math.max(320, Math.round(cw * scale));
+        targetH = Math.max(240, Math.round(ch * scale));
+      } else if (mode === '4:3') {
+        targetW = 640;
+        targetH = 480;
+      } else if (mode === '16:9') {
+        targetW = 854;
+        targetH = 480;
+      } else if (mode === '3:4') {
+        targetW = 450;
+        targetH = 600;
+      }
+      if (this.canvas.width !== targetW || this.canvas.height !== targetH) {
+        this.canvas.width = targetW;
+        this.canvas.height = targetH;
+      }
+    };
+
+    applySize();
+    if (wrap && 'ResizeObserver' in window) {
+      new ResizeObserver(() => applySize()).observe(wrap);
+    }
+    window.addEventListener('resize', applySize);
+    aspectSel?.addEventListener('change', () => {
+      mode = aspectSel.value || 'auto';
+      localStorage.setItem(STORAGE_KEY, mode);
+      applySize();
+      this.hud.showAlert(`화면 비율: ${aspectSel.options[aspectSel.selectedIndex]?.text ?? mode}`);
     });
   }
 
